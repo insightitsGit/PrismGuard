@@ -1,0 +1,8 @@
+# Bundled seed import order — authored taxonomy first, then external datasets.
+# Import: prismguard-seed import --bundled --profile full
+
+authored/seed.yaml
+external/s-labs/train.csv
+external/s-labs/validation.csv
+external/s-labs/test.csv
+external/yanismiraoui/prompt_injections.csv

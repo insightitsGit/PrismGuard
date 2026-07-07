@@ -291,7 +291,7 @@ The seed corpus is loaded via `prismguard-seed import`, not manual SQL. One run 
 | `replace --scope category:<slug>` | Delete that category's entries, then load merged sources for it |
 | `replace --scope all` | Truncate full corpus (requires `--confirm-replace-all`), then load |
 
-Formats: YAML/JSON (taxonomy + rules + entries), CSV, JSONL, Markdown (Part 5 convention). A **bundled v0 corpus** ships inside the package at `prismguard/data/seeds/v0/` (40+ examples, 6 Tier-1 rules, 10 categories) — import with `prismguard-seed import --bundled`. Feedback loop (Part 8) reuses the same importer in `update` mode.
+Formats: YAML/JSON (taxonomy + rules + entries), CSV, JSONL, Markdown (Part 5 convention). The **bundled seed corpus** ships inside the package at `prismguard/seed/corpus/` (authored taxonomy + S-Labs + yanismiraoui external datasets) — import with `prismguard-seed import --bundled` (authored) or `--bundled --profile full`. Feedback loop (Part 8) reuses the same importer in `update` mode.
 
 ---
 

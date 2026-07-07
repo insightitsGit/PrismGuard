@@ -76,7 +76,7 @@ where = ["."]
 include = ["prismguard*"]
 
 [tool.setuptools.package-data]
-prismguard = ["config/triage.yaml", "config/storage.yaml", "data/seeds/v0/*"]
+prismguard = ["config/triage.yaml", "config/storage.yaml", "seed/corpus/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

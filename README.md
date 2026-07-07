@@ -12,5 +12,5 @@ See [docs/prismguard-design.md](docs/prismguard-design.md) for the full architec
 - **Depends on**: `prismrag`, `prismcortex`, `prismlib` (existing Prism family packages).
 - **Storage**: pgvector/Postgres by default; Chroma, Pinecone, Weaviate via `prismguard[pgvector|chroma|pinecone|weaviate]` — see `prismguard/storage/`.
 - **Seed import**: multi-source (`prismguard-seed import file1.yaml dir/ @manifest.txt`), `update` or `replace` mode — see `prismguard/seed/`.
-- **Bundled seed**: `prismguard/data/seeds/v0/` ships with the package (10 categories, Tier-1 rules, 40+ examples). Quick start: `prismguard-seed import --bundled`.
+- **Bundled seed**: ships in `prismguard/seed/corpus/` (authored + external datasets). Quick start: `prismguard-seed import --bundled` (authored) or `--bundled --profile full` (15k+ rows). See [`seed/README.md`](seed/README.md).
 - **Not**: a replacement for output-side monitoring, tool sandboxing, or instruction-hierarchy prompting — one layer in a defense-in-depth stack.

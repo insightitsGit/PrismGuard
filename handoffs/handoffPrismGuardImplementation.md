@@ -428,18 +428,14 @@ prismguard-seed import @seed-manifest.txt --mode replace --scope all --confirm-r
 
 ### T5 — Load the real seed as the first import
 
-**Files:** bundled corpus lives in `prismguard/data/seeds/v0/` (taxonomy.yaml + entries.yaml + manifest.txt) — **shipped with the package**
+**Files:** bundled corpus lives in `prismguard/seed/corpus/` (`authored/seed.yaml`, `external/*`, manifests) — **shipped with the package via setuptools package-data**
 
 ```bash
-# Recommended quick start (bundled v0 seed, memory or configured backend)
-prismguard-seed import --bundled --mode update
-
-# Or explicit paths / design doc markdown
-prismguard-seed import docs/prismguard-design.md --format markdown --mode update
-prismguard-seed import docs/prismguard-design.md seeds/rules.yaml --mode update
+prismguard-seed import --bundled                      # authored only (default)
+prismguard-seed import --bundled --profile full       # + S-Labs + yanismiraoui
 ```
 
-Python API: `from prismguard.data import import_bundled_seed, load_bundled_seed`
+Python API: `from prismguard.seed import import_bundled_seed, load_bundled_seed`
 
 Default storage: pgvector via `PRISMGUARD_STORAGE_DSN`; CI uses `PRISMGUARD_STORAGE_BACKEND=memory` or CLI default (memory when no DSN).
 

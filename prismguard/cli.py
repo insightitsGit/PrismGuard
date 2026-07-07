@@ -5,7 +5,7 @@ import json
 import os
 import sys
 
-from prismguard.data import import_bundled_seed, load_bundled_seed
+from prismguard.seed import import_bundled_seed, load_bundled_seed
 from prismguard.seed.importer import import_seeds
 from prismguard.seed.parse import parse_seed_sources
 from prismguard.storage import create_storage, create_storage_from_env
@@ -34,7 +34,13 @@ def _build_parser() -> argparse.ArgumentParser:
     import_cmd.add_argument(
         "--bundled",
         action="store_true",
-        help="Import the packaged v0 seed corpus from prismguard/data/seeds/v0/",
+        help="Import the packaged seed corpus from prismguard/seed/corpus/",
+    )
+    import_cmd.add_argument(
+        "--profile",
+        default="authored",
+        choices=["authored", "full"],
+        help="Bundled corpus profile: authored (default, fast) or full (includes external datasets)",
     )
     import_cmd.add_argument(
         "--format",
@@ -89,6 +95,7 @@ def main(argv: list[str] | None = None) -> None:
                 scope=args.scope,
                 dry_run=args.dry_run,
                 confirm_replace_all=args.confirm_replace_all,
+                profile=args.profile,
             )
         else:
             parsed = parse_seed_sources(args.sources, format_name=args.format, recursive=args.recursive)
