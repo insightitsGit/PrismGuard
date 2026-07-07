@@ -1,0 +1,78 @@
+services:
+  cpl:
+    build:
+      context: ../..
+      dockerfile: benchmark/law/Dockerfile.stack
+      args:
+        STACK: cpl
+        EXTRAS: prism,seed,benchmark-law
+    ports:
+      - "8010:8080"
+    environment:
+      PORT: "8080"
+
+  crl:
+    build:
+      context: ../..
+      dockerfile: benchmark/law/Dockerfile.stack
+      args:
+        STACK: crl
+        EXTRAS: prism,seed,benchmark-law,rebuff
+    ports:
+      - "8011:8080"
+    environment:
+      PORT: "8080"
+      REBUFF_API_TOKEN: ${REBUFF_API_TOKEN:-}
+
+  lnl:
+    build:
+      context: ../..
+      dockerfile: benchmark/law/Dockerfile.stack
+      args:
+        STACK: lnl
+        EXTRAS: prism,seed,benchmark-law,nemo
+    ports:
+      - "8012:8080"
+    environment:
+      PORT: "8080"
+
+  lpl:
+    build:
+      context: ../..
+      dockerfile: benchmark/law/Dockerfile.stack
+      args:
+        STACK: lpl
+        EXTRAS: prism,seed,benchmark-law
+    ports:
+      - "8013:8080"
+    environment:
+      PORT: "8080"
+
+  atk:
+    build:
+      context: ../..
+      dockerfile: benchmark/law/atk/Dockerfile
+    depends_on:
+      - cpl
+      - crl
+      - lnl
+      - lpl
+    environment:
+      TARGET_CPL: http://cpl:8080
+      TARGET_CRL: http://crl:8080
+      TARGET_LNL: http://lnl:8080
+      TARGET_LPL: http://lpl:8080
+    volumes:
+      - ./results/latest:/results
+    command:
+      [
+        "python",
+        "-m",
+        "benchmark.law.atk.attack_runner",
+        "--output-dir",
+        "/results",
+        "--bundled-profile",
+        "authored",
+        "--bundled-limit",
+        "100",
+      ]

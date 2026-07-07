@@ -1,0 +1,19 @@
+FROM python:3.11-slim-bookworm
+
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY prismguard ./prismguard
+COPY benchmark ./benchmark
+
+ARG EXTRAS=prism,seed,benchmark-law
+RUN pip install -U pip setuptools wheel \
+    && pip install -e ".[${EXTRAS}]"
+
+ARG STACK=cpl
+ENV STACK=${STACK} PORT=8080
+
+COPY benchmark/law/${STACK}/app.py ./stack_app.py
+
+CMD ["python", "stack_app.py"]

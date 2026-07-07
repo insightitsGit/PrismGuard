@@ -1,0 +1,91 @@
+queries:
+  - query_id: law-001
+    text: "What is the notice period to terminate our standard mutual NDA?"
+    category_slug: contracts
+    must_cite: ["thirty", "30", "days", "notice"]
+    variant: exact_repeat
+  - query_id: law-002
+    text: "How long do confidentiality duties survive after NDA termination for trade secrets?"
+    category_slug: contracts
+    must_cite: ["five", "5", "years", "trade secret"]
+    variant: exact_repeat
+  - query_id: law-003
+    text: "Summarize the limitation of liability cap in our MSA."
+    category_slug: contracts
+    must_cite: ["twelve", "12", "months", "fees"]
+    variant: paraphrase
+  - query_id: law-004
+    text: "When does source code escrow release trigger?"
+    category_slug: contracts
+    must_cite: ["bankruptcy", "escrow", "breach"]
+    variant: novel
+  - query_id: law-005
+    text: "Can we assign the agreement to an affiliate without consent?"
+    category_slug: contracts
+    must_cite: ["consent", "affiliate", "assign"]
+    variant: paraphrase
+  - query_id: law-006
+    text: "What indemnity does the vendor owe for third-party IP claims?"
+    category_slug: contracts
+    must_cite: ["indemnif", "intellectual property", "third"]
+    variant: exact_repeat
+  - query_id: law-007
+    text: "In Apex Holdings, what communications are covered by attorney-client privilege?"
+    category_slug: case_law
+    must_cite: ["legal advice", "privilege", "counsel"]
+    variant: exact_repeat
+  - query_id: law-008
+    text: "Does work product protection apply to draft litigation memos?"
+    category_slug: case_law
+    must_cite: ["work product", "litigation"]
+    variant: paraphrase
+  - query_id: law-009
+    text: "Who has standing to enforce an NDA under Riverton v. Delta LLC?"
+    category_slug: case_law
+    must_cite: ["standing", "beneficiar", "parties"]
+    variant: novel
+  - query_id: law-010
+    text: "When is summary judgment appropriate for alleged NDA breach in Harbor Tech?"
+    category_slug: case_law
+    must_cite: ["summary judgment", "public"]
+    variant: paraphrase
+  - query_id: law-011
+    text: "Can confidential settlement terms be shared with tax advisors?"
+    category_slug: case_law
+    must_cite: ["settlement", "confidential", "tax"]
+    variant: exact_repeat
+  - query_id: law-012
+    text: "Are Delaware forum selection clauses enforced for commercial MSAs?"
+    category_slug: case_law
+    must_cite: ["delaware", "forum"]
+    variant: novel
+  - query_id: law-013
+    text: "What GDPR lawful basis applies to payroll processing?"
+    category_slug: compliance
+    must_cite: ["legal obligation", "payroll", "gdpr"]
+    variant: exact_repeat
+  - query_id: law-014
+    text: "How long do we have to respond to a GDPR data subject access request?"
+    category_slug: compliance
+    must_cite: ["one month", "dsar", "access"]
+    variant: paraphrase
+  - query_id: law-015
+    text: "When must we disclose major customer contracts in SEC filings?"
+    category_slug: compliance
+    must_cite: ["10%", "revenue", "sec"]
+    variant: novel
+  - query_id: law-016
+    text: "What must a privilege log include for withheld documents?"
+    category_slug: compliance
+    must_cite: ["privilege log", "author", "recipients"]
+    variant: exact_repeat
+  - query_id: law-017
+    text: "What happens when we anticipate litigation regarding document retention?"
+    category_slug: compliance
+    must_cite: ["litigation hold", "esi", "deletion"]
+    variant: paraphrase
+  - query_id: law-018
+    text: "Employee NDA — what notice does the company need to give to terminate?"
+    category_slug: contracts
+    must_cite: ["fourteen", "14", "employee"]
+    variant: novel

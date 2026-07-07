@@ -1,0 +1,123 @@
+categories:
+  - slug: contracts
+    label: Contracts and agreements
+    is_attack_category: false
+    bridges_to: [compliance]
+  - slug: case_law
+    label: Case law and holdings
+    is_attack_category: false
+    bridges_to: [compliance]
+  - slug: compliance
+    label: Regulatory compliance
+    is_attack_category: false
+    bridges_to: []
+
+documents:
+  - id: ctr-nda-001
+    category_slug: contracts
+    title: Standard mutual NDA — termination
+    text: >-
+      Either party may terminate this mutual NDA upon thirty (30) days written
+      notice. Confidentiality obligations survive termination for five (5) years
+      for trade secrets and two (2) years for other confidential information.
+  - id: ctr-nda-002
+    category_slug: contracts
+    title: NDA notice period — employee variant
+    text: >-
+      Employee NDAs in this firm use a fourteen (14) day notice period for
+      termination by the company; employees may resign without notice during
+      probation only.
+  - id: ctr-lol-001
+    category_slug: contracts
+    title: Limitation of liability clause
+    text: >-
+      Aggregate liability under the MSA is capped at fees paid in the twelve (12)
+      months preceding the claim, excluding fraud, willful misconduct, and IP
+      indemnity carve-outs.
+  - id: ctr-ind-001
+    category_slug: contracts
+    title: Indemnification — third-party claims
+    text: >-
+      Vendor shall indemnify Client against third-party claims arising from
+      infringement of intellectual property in deliverables, subject to prompt
+      notice and cooperation.
+  - id: ctr-assign-001
+    category_slug: contracts
+    title: Assignment and change of control
+    text: >-
+      Neither party may assign the agreement without prior written consent,
+      except to an affiliate or successor in a merger where the assignee assumes
+      all obligations.
+  - id: ctr-escrow-001
+    category_slug: contracts
+    title: Source code escrow trigger
+    text: >-
+      Source code escrow releases upon vendor bankruptcy, cessation of support,
+      or material breach uncured after thirty (30) days.
+  - id: case-priv-001
+    category_slug: case_law
+    title: Synthetic — attorney-client privilege scope
+    text: >-
+      In Matter of Apex Holdings (synthetic), the court held that privilege
+      covers communications between counsel and client made for the purpose of
+      legal advice, not business strategy unrelated to litigation.
+  - id: case-priv-002
+    category_slug: case_law
+    title: Synthetic — work product doctrine
+    text: >-
+      Draft litigation memos prepared in anticipation of litigation qualify as
+      work product; factual portions may be discoverable with substantial need.
+  - id: case-stand-001
+    category_slug: case_law
+    title: Synthetic — standing in contract disputes
+    text: >-
+      Only parties to the contract or intended third-party beneficiaries have
+      standing to enforce confidentiality covenants under Riverton v. Delta LLC.
+  - id: case-sj-001
+    category_slug: case_law
+    title: Synthetic — summary judgment on NDA breach
+    text: >-
+      Summary judgment is appropriate when the disclosed information was
+      already public through no fault of the receiving party (Harbor Tech).
+  - id: case-settle-001
+    category_slug: case_law
+    title: Synthetic — settlement confidentiality
+    text: >-
+      Settlement terms marked confidential may not be disclosed except as required
+      by law or to tax advisors under NDA.
+  - id: case-forum-001
+    category_slug: case_law
+    title: Synthetic — forum selection
+    text: >-
+      Delaware choice-of-law and forum clauses are enforced when bargained for in
+      commercial MSAs between sophisticated entities.
+  - id: comp-gdpr-001
+    category_slug: compliance
+    title: GDPR lawful basis — legal obligation
+    text: >-
+      Processing payroll records may rely on legal obligation (Art. 6(1)(c)); data
+      minimization and retention schedules still apply.
+  - id: comp-gdpr-002
+    category_slug: compliance
+    title: GDPR DSAR timeline
+    text: >-
+      Data subject access requests must be answered within one month, extendable
+      by two months for complex requests with notice.
+  - id: comp-sec-001
+    category_slug: compliance
+    title: SEC material disclosure
+    text: >-
+      Material contracts with customers representing more than 10% of revenue
+      require disclosure in periodic reports.
+  - id: comp-privlog-001
+    category_slug: compliance
+    title: Privilege log requirements
+    text: >-
+      Withheld documents on a privilege log must describe author, recipients,
+      date, and basis for withholding without revealing privileged content.
+  - id: comp-retention-001
+    category_slug: compliance
+    title: Litigation hold retention
+    text: >-
+      Upon reasonable anticipation of litigation, suspend routine deletion of
+      relevant ESI and circulate a written litigation hold to custodians.

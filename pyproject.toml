@@ -68,6 +68,18 @@ dev = [
 seed = [
     "pyarrow>=14.0",
 ]
+benchmark-law = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "httpx>=0.27",
+    "langgraph>=0.2",
+]
+rebuff = [
+    "rebuff>=0.1.1",
+]
+nemo = [
+    "nemoguardrails>=0.9.0",
+]
 all = [
     "prismguard[pgvector,chroma,pinecone,weaviate,guard-model,seed,dev]",
 ]
@@ -77,7 +89,7 @@ prismguard-seed = "prismguard.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["prismguard*"]
+include = ["prismguard*", "benchmark*"]
 
 [tool.setuptools.package-data]
 prismguard = ["config/triage.yaml", "config/storage.yaml", "seed/corpus/**/*"]
