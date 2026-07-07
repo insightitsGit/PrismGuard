@@ -11,6 +11,13 @@ ARG EXTRAS=prism,seed,benchmark-law
 RUN pip install -U pip setuptools wheel \
     && pip install -e ".[${EXTRAS}]"
 
+# Bake PrismGuard ONNX artifact when guard-model extra is requested (CPL/LPL stacks).
+RUN if echo "${EXTRAS}" | grep -q guard-model; then \
+      pip install -e ".[train,seed]" \
+      && python -m prismguard.models.cli train --profile full --artifact-id prism-pi-v1 \
+         --epochs 1 --batch-size 16 --max-length 256 --max-train-examples 8000; \
+    fi
+
 ARG STACK=cpl
 ENV STACK=${STACK} PORT=8080
 

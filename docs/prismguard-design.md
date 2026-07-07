@@ -1,6 +1,6 @@
 # PrismGuard — Design Document
 
-Status: draft v0.1
+Status: draft v0.2 (updated 2026-07-07 — owned ONNX Guard Model + seed-driven training loop)
 Depends on: prismRAG (taxonomy graph retrieval), prismCortex (pgvector seed store), prismLib (in-process cache/runtime)
 Owner note: this document captures the architecture agreed in design discussion; it has not been validated with real users yet (see [Part 9 — Open Risks](#part-9--open-risks--what-this-doc-does-not-prove)).
 
@@ -52,11 +52,12 @@ These targets are hypotheses. They must be measured against a real eval set once
 | **prismRAG** | Taxonomy-aware graph retrieval: categories, Tier-1 rules, dual vectors, Louvain communities, bridges, graph BFS expansion, append mode | Reused |
 | **prismLib** | In-process runtime cache; warm-loads the corpus at server startup; hosts the request-time check | Reused |
 | **prismLib Runtime Check** | The request-time pipeline: normalize → rule check → category similarity → graph expansion → triage | **New** |
-| **Guard Model tier** | Fast local classifier for gray-zone prompts | **New** |
-| **LLM Judge tier** | Rare, isolated LLM call for guard-uncertain prompts | **New** |
-| **Feedback orchestration** | Review queue + append-back into prismRAG/prismCortex | **New** |
+| **Guard Model tier** | Prism-owned ONNX prompt-injection classifier (`prismguard/models/`); runs only on fusion gray-zone traffic | **Implemented** |
+| **Guard Model training** | Seed DB → fine-tune → ONNX artifact; repeatable via `prismguard-model train` | **Implemented** |
+| **LLM Judge tier** | Rare, isolated LLM call for guard-uncertain prompts | **Implemented** (heuristic default; OpenAI optional) |
+| **Feedback orchestration** | Review queue + append-back into prismRAG/prismCortex + classifier retrain export | **Implemented** |
 
-PrismGuard itself contributes the runtime check, the two-tier escalation, and the feedback orchestration — the taxonomy engine and persistence are inherited, not rebuilt.
+PrismGuard itself contributes the runtime check, the two-tier escalation, the owned classifier stack, and the feedback/training orchestration — the taxonomy engine and persistence are inherited, not rebuilt.
 
 ---
 
@@ -89,14 +90,15 @@ Score Aggregation → Triage Split (per-category thresholds, not one global cuto
   └── gray zone
         │
         ▼
-      Guard Model (fast, local, cheap classifier)
+      Guard Model (Prism ONNX — parallel fusion, Option A)
+        │  classifier runs in parallel with embed/ANN (after tier1)
+        │  injection probability fused via w_clf; short-circuit: tier1, benign, corpus_match
         │
-        ├── confident ─────────────────────────────────────► Final Decision
-        └── not confident
+        ├── fused block/allow ───────────────────────────────────► Final Decision
+        └── fused gray
               │
               ▼
-            LLM Judge (isolated call; structured output; sees prompt + matched
-                        examples + category/rule context, never tool access)
+            LLM Judge (only if classifier also uncertain; no second classifier call)
               │
               ▼
             Final Decision
@@ -104,6 +106,7 @@ Score Aggregation → Triage Split (per-category thresholds, not one global cuto
   ▼
 Feedback: log rule/category/score lineage → human review (for blocks) →
           append new rule/seed vector into prismRAG + prismCortex (no full reingest)
+          export reviewed rows → `prismguard-model train` → new ONNX artifact
 ```
 
 ---
@@ -256,12 +259,46 @@ High-severity rule hits can short-circuit straight to BLOCK without needing the 
 
 ## Part 7 — Escalation tiers (cost control)
 
-### Guard Model
+### Guard Model (Prism-owned ONNX classifier)
 
-- Small, fast, local classifier (fine-tuned or off-the-shelf guard/moderation model — open decision, see Part 9).
-- Input: gray-zone prompt + matched category + rule lineage + similarity score.
-- Output: structured verdict + confidence.
-- Only runs on gray-zone traffic — by design this should be a small fraction if the taxonomy layer is doing its job.
+PrismGuard ships an **owned** Guard Model stack under `prismguard/models/` — not a wrapper around LLM Guard or another vendor library.
+
+**Option A (default): parallel fusion** — the classifier runs in a background thread while the embed/ANN/graph path executes. Its injection probability is fused via `w_clf` before block/allow/gray routing. Short-circuits skip the classifier: tier1, benign fast path, corpus match. Gray escalation reuses the parallel verdict (no second classifier call); Judge runs only if the classifier was uncertain.
+
+**Legacy: `classifier_mode: gray_only`** — classifier runs only on fusion gray (Bug3 cascade).
+
+| Component | Path | Role |
+|-----------|------|------|
+| Protocol + wiring | `prismguard/runtime/guard_model.py` | `GuardModel` interface; `PrismONNXGuardModel`; invoked from `RuntimeChecker` on fusion gray only |
+| Inference | `prismguard/models/onnx_classifier.py` | ONNX Runtime session; injection probability |
+| Artifacts | `prismguard/models/artifacts/<artifact_id>/` | `model.onnx`, `tokenizer.json`, `model_card.yaml`, `corpus_manifest.json`, `train_metrics.json` |
+| Training | `prismguard/models/train.py`, `corpus.py` | Build labeled corpus from seed DB; fine-tune; export ONNX |
+| CLI | `prismguard-model` | `corpus-stats`, `train`, `export` |
+
+**Runtime contract** (`GuardModel.check` → `GuardModelVerdict`):
+
+- `decision`: `block` | `allow` | `uncertain`
+- `confidence`: injection probability (0–1)
+- `model_id`: artifact id (default `prism-pi-v1`)
+- Only runs when `gray_zone_policy: escalate` and fusion lands in gray band
+
+**Configuration** (`prismguard/config/triage.yaml`):
+
+```yaml
+gray_zone_policy: escalate
+guard_model:
+  enabled: true
+  classifier_mode: parallel  # parallel (Option A) | gray_only (legacy cascade)
+  artifact_id: prism-pi-v1
+  uncertain_low: 0.35
+  uncertain_high: 0.65
+fusion:
+  w_clf: 0.30  # classifier injection probability weight in parallel fusion
+```
+
+**Dependencies:** `pip install prismguard[guard-model]` (onnxruntime, tokenizers, numpy). Training is a separate extra: `prismguard[train]` (transformers, torch).
+
+See `docs/guard-model-training.md` for the full training and retraining loop.
 
 ### LLM Judge
 
@@ -275,11 +312,37 @@ High-severity rule hits can short-circuit straight to BLOCK without needing the 
 
 ## Part 8 — Feedback loop & continuous learning
 
+PrismGuard has **two complementary learning paths**:
+
+| Path | What improves | How data flows |
+|------|---------------|----------------|
+| **Structural** (Tier-1 / fusion / graph) | Fewer gray escalations; better category routing | Reviewed blocks → `prismguard-seed import` → prismCortex + prismRAG |
+| **Neural** (Guard Model) | Better decisions on ambiguous text | Seed DB + reviewed feedback → `prismguard-model train` → new ONNX artifact |
+
+### Runtime feedback
+
 1. Every Layer 2 decision is logged with full lineage: rule hits, category, similarity scores, graph path, guard model verdict, judge verdict + reasoning (if invoked).
 2. **Confirmed blocks** go to a human review queue before being appended as new seed entries — this prevents an attacker from poisoning the corpus by deliberately triggering false "confirmed attack" labels.
 3. **Near-miss allows** (gray-zone prompts judged benign, close to threshold) become calibration data for per-category threshold tuning.
 4. Reviewed entries append into `prismcortex.seed_entries` and `prismrag.rules`/`prismrag.word_graph_*` via prismRAG's append mode — incremental, no full reingest.
 5. A held-out red-team eval set (never used for threshold tuning) tracks precision/recall over time so taxonomy/threshold drift is visible before it causes production misses or false-positive complaints.
+
+### Classifier retraining (open loop)
+
+The bundled **full** seed profile provides ~22k labeled examples (attack vs `benign_adjacent`). Training is repeatable as the corpus grows:
+
+```bash
+prismguard-model corpus-stats --profile full
+prismguard-model train --profile full --artifact-id prism-pi-v1
+# after new seed or feedback:
+prismguard-model train --profile full --artifact-id prism-pi-v2 \
+  --base-model prismguard/models/artifacts/prism-pi-v1-hf \
+  --feedback-jsonl data/feedback.jsonl
+```
+
+Each run writes `corpus_manifest.json` (fingerprint + source counts) and `train_metrics.json` beside the ONNX artifact. Bump `guard_model.artifact_id` in `triage.yaml` to deploy a new version.
+
+`FeedbackReviewService.export_training_jsonl()` exports human-approved blocks (and optional calibration allows) for the training CLI.
 
 ### Seed import (multi-source, update or replace)
 
@@ -307,14 +370,14 @@ Named directly, not glossed over:
 
 ---
 
-## Part 10 — Suggested rollout phases
+## Part 10 — Rollout phases (status)
 
-1. **Phase 0** — Finalize taxonomy + seed corpus (this doc's Part 5 as v0); get it reviewed by someone other than the author.
-2. **Phase 1** — Build prismLib Runtime Check standalone (rules + dual vector + graph expansion, no Guard Model or LLM Judge yet). Benchmark against a public adversarial eval set and against a free baseline (e.g. Llama Guard) to get a real precision/recall number before adding cost.
-3. **Phase 2** — Add Guard Model tier; measure how much of the gray zone it resolves without escalation.
-4. **Phase 3** — Add LLM Judge tier + feedback loop; measure actual judge-call volume against the Part 1 targets.
-5. **Phase 4** — Audit/compliance reporting surface, packaging, and — before any of this — a real conversation with 3-5 prospective users to confirm the problem is acute enough that they'd adopt it.
+| Phase | Scope | Status |
+|-------|--------|--------|
+| **Phase 0** | Taxonomy + seed corpus v0 | **Done** — bundled `full` profile (~22k labeled rows) |
+| **Phase 1** | Runtime check (rules + dual vector + graph + fusion) | **Done** — `prismguard/runtime/check.py` |
+| **Phase 2** | Guard Model tier (owned ONNX classifier) | **Done** — `prism-pi-v1` fine-tuned on bundled seed (`corpus_manifest.json` fingerprint `82d3b902931bfe7f`, 6k stratified sample; eval accuracy 71.5%, F1 injection 0.62) |
+| **Phase 3** | LLM Judge + feedback loop | **Done** — heuristic judge + `FeedbackReviewService`; OpenAI optional |
+| **Phase 4** | Audit surface, packaging, user validation | **Open** |
 
----
-
-*This document reflects the architecture as designed in conversation; it should be revised as Phase 1 benchmarking produces real numbers.*
+Ongoing: retrain classifier as seed/feedback grows (`prismguard-model train`); measure holdout vs CGL benchmark; tune uncertain band and fusion thresholds per domain.

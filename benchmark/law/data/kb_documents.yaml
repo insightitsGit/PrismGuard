@@ -1,3 +1,5 @@
+# SEEDED knowledge base for all stacks — not attack or hold-out eval traffic.
+# SEEDED into stack KB/RAG only — not attack eval traffic.
 categories:
   - slug: contracts
     label: Contracts and agreements

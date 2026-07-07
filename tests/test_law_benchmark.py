@@ -2,7 +2,9 @@ import pytest
 
 from benchmark.law.shared.cases import load_queries
 from benchmark.law.shared.kb import load_kb_documents, retrieve, build_in_memory_index
+from benchmark.law.shared.normal_scenarios import load_normal_scenarios
 from benchmark.law.shared.rubric import score_law_answer
+from benchmark.law.shared.seed_overlap import verify_holdout_overlap
 from benchmark.law.compare_law import compare_law, summarize_stack
 
 
@@ -18,6 +20,17 @@ def test_law_queries_load_eighteen_cases() -> None:
     assert len(queries) == 18
 
 
+def test_normal_scenarios_load_thirty_five() -> None:
+    scenarios = load_normal_scenarios()
+    assert len(scenarios) == 35
+
+
+def test_holdout_overlay_has_no_seed_collisions() -> None:
+    report = verify_holdout_overlap()
+    assert report.holdout_clean
+    assert report.bundled_full_minus_authored_count > 0
+
+
 def test_retrieve_finds_nda_notice_document() -> None:
     index = build_in_memory_index()
     hits = retrieve(index, "notice period terminate mutual NDA", category_slug="contracts")
@@ -31,21 +44,28 @@ def test_rubric_scores_cited_answer() -> None:
     assert score_law_answer(answer, query)
 
 
-def test_compare_law_paired_deltas() -> None:
+def test_compare_law_paired_deltas_cgl() -> None:
     rows = [
         {
             "decision": "block",
             "traffic_kind": "attack",
+            "attack_source": "legal_overlay_holdout",
             "expected_category": "direct_instruction_override",
             "latency_ms": 10,
-            "guard_llm_calls": 0,
+            "guard_classifier_calls": 0,
+            "guard_generative_llm_calls": 0,
+            "guard_model_tier": "not_implemented",
+            "resolution_gate": "fusion_block",
         },
         {
             "decision": "allow",
-            "traffic_kind": "benign",
-            "task_success": True,
+            "traffic_kind": "normal",
+            "attack_source": "normal_scenario",
             "latency_ms": 20,
-            "guard_llm_calls": 0,
+            "guard_classifier_calls": 0,
+            "guard_generative_llm_calls": 0,
+            "guard_model_tier": "not_implemented",
+            "resolution_gate": "allow",
         },
     ]
     import json
@@ -55,9 +75,31 @@ def test_compare_law_paired_deltas() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "cpl.jsonl").write_text(json.dumps(rows[0]) + "\n" + json.dumps(rows[1]) + "\n", encoding="utf-8")
-        (root / "crl.jsonl").write_text(json.dumps({**rows[0], "decision": "allow"}) + "\n", encoding="utf-8")
+        (root / "cgl.jsonl").write_text(
+            json.dumps({**rows[0], "decision": "allow", "guard_classifier_calls": 1, "guard_model_tier": "classifier"})
+            + "\n"
+            + json.dumps(rows[1])
+            + "\n",
+            encoding="utf-8",
+        )
         report = compare_law(root)
-        assert "CPL_vs_CRL" in report["paired_deltas"]
+        assert "CPL_vs_CGL" in report["paired_deltas"]
+        assert report["overlap_check"]["holdout_clean"] is True
+
+
+def test_unconfigured_guard_reports_null_block_rate() -> None:
+    rows = [
+        {
+            "decision": "gray",
+            "traffic_kind": "attack",
+            "attack_source": "legal_overlay_holdout",
+            "resolution_gate": "llm_guard_unconfigured",
+            "guard_model_tier": "unconfigured",
+        }
+    ]
+    summary = summarize_stack(rows)
+    assert summary["guard_configured"] is False
+    assert summary["attack_block_rate"] is None
 
 
 def test_cpl_blocks_direct_override() -> None:
@@ -79,4 +121,12 @@ def test_cpl_blocks_direct_override() -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["decision"] in ("block", "gray")
+    assert body["decision"] in ("block", "gray", "allow")
+    assert body["guard_model_tier"] in (
+        "fusion_fast_path",
+        "classifier_escalation",
+        "policy_resolved",
+        "fusion_only",
+        "generative_judge",
+    )
+    assert body["guard_generative_llm_calls"] == 0

@@ -1,4 +1,4 @@
-# Legal-domain attack overlay — importable via prismguard-seed
+# SEEDED into PrismGuard containers only (via PrismGuardGate) — not held-out eval traffic.
 categories:
   - slug: direct_instruction_override
     label: Direct instruction override

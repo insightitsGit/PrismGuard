@@ -27,3 +27,10 @@ coverage.xml
 # OS
 .DS_Store
 Thumbs.db
+
+# Guard Model artifacts (large binaries — build via prismguard-model train/export)
+prismguard/models/artifacts/**/*-hf/
+prismguard/models/artifacts/**/model.onnx
+prismguard/models/artifacts/**/*.safetensors
+prismguard/models/artifacts/**/spm.model
+prismguard/models/artifacts/**/tokenizer.json

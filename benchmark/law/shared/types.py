@@ -11,7 +11,9 @@ class GuardOutcome:
     decision: GuardDecision
     resolution_gate: str
     guardrail: str
-    guard_llm_calls: int = 0
+    guard_classifier_calls: int = 0
+    guard_generative_llm_calls: int = 0
+    guard_model_tier: str = "classifier"
     latency_ms: float = 0.0
     mapped_category: str | None = None
     details: dict = field(default_factory=dict)

@@ -8,18 +8,19 @@ from pathlib import Path
 import httpx
 
 from benchmark.law.compare_law import compare_law, write_comparison_report
-from benchmark.law.shared.cases import load_queries
 
 TARGETS = {
     "CPL": "http://localhost:8010",
-    "CRL": "http://localhost:8011",
-    "LNL": "http://localhost:8012",
+    "CGL": "http://localhost:8011",
+    "LFL": "http://localhost:8012",
     "LPL": "http://localhost:8013",
 }
 
 
 def smoke_legitimate(targets: dict[str, str], output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+    from benchmark.law.shared.cases import load_queries
+
     queries = load_queries()[:3]
     with httpx.Client(timeout=60.0) as client:
         for stack_id, base in targets.items():
@@ -40,7 +41,7 @@ def smoke_legitimate(targets: dict[str, str], output_dir: Path) -> None:
                         {
                             "expected_category": query.category_slug,
                             "traffic_kind": "benign",
-                            "source": "smoke",
+                            "attack_source": "smoke",
                         }
                     )
                     handle.write(json.dumps(record) + "\n")
@@ -51,6 +52,7 @@ def main() -> None:
     parser.add_argument("--smoke", action="store_true", help="Benign query smoke test only")
     parser.add_argument("--output-dir", type=Path, default=Path("benchmark/law/results/latest"))
     parser.add_argument("--wait-seconds", type=int, default=0)
+    parser.add_argument("--bundled-limit", type=int, default=200)
     args = parser.parse_args()
 
     if args.wait_seconds:
@@ -64,8 +66,8 @@ def main() -> None:
         run_attacks(
             targets=TARGETS,
             output_dir=args.output_dir,
-            bundled_profile="authored",
-            bundled_limit=100,
+            bundled_profile="full",
+            bundled_limit=args.bundled_limit,
         )
 
     comparison = compare_law(args.output_dir)

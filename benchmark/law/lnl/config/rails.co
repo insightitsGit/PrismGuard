@@ -1,7 +1,0 @@
-define user ask legal question
-  "What is the notice period in our NDA?"
-  "Summarize the Apex Holdings privilege holding."
-
-define flow jailbreak detection
-  user ...
-  bot refuse to answer

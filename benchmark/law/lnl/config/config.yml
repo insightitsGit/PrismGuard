@@ -1,9 +1,0 @@
-config:
-  models: []
-
-rails:
-  input:
-    flows:
-      - name: jailbreak detection
-        steps:
-          - jailbreak detection heuristics: on

@@ -4,7 +4,7 @@ import os
 from typing import Callable
 
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from benchmark.law.shared.assistant import LawAssistant, run_chorus_pipeline, run_langgraph_pipeline
 from benchmark.law.shared.cases import LawQuery, load_queries
@@ -37,7 +37,9 @@ class QueryResponse(BaseModel):
     answer: str = ""
     task_success: bool = False
     latency_ms: float = 0.0
-    guard_llm_calls: int = 0
+    guard_classifier_calls: int = 0
+    guard_generative_llm_calls: int = 0
+    guard_model_tier: str = ""
     agent_llm_calls: int = 0
     traffic_kind: str = "benign"
     error: str | None = None
@@ -54,7 +56,9 @@ def _to_response(result: StackResult) -> QueryResponse:
         answer=result.answer,
         task_success=result.task_success,
         latency_ms=result.latency_ms,
-        guard_llm_calls=result.guard.guard_llm_calls,
+        guard_classifier_calls=result.guard.guard_classifier_calls,
+        guard_generative_llm_calls=result.guard.guard_generative_llm_calls,
+        guard_model_tier=result.guard.guard_model_tier,
         agent_llm_calls=result.agent_llm_calls,
         traffic_kind=result.traffic_kind,
         error=result.error,
