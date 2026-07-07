@@ -29,7 +29,7 @@ dependencies = [
 [project.optional-dependencies]
 prism = [
     "prismlib>=0.4.0",
-    "prismrag-patch>=1.0.0",
+    "prismrag-patch>=0.2.1,<1.0.0",
     "prismcortex>=0.2.1",
 ]
 pgvector = [

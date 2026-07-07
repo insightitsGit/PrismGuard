@@ -194,6 +194,7 @@ def test_import_runs_taxonomy_after_replace_scope(taxonomy_yaml: Path, entries_c
             scope="category:direct_instruction_override",
         )
         assert report.taxonomy is not None
+        assert report.taxonomy.ingest.embedded == 1
         remaining = storage.vector.list_seed_entries_by_category("direct_instruction_override")
         assert len(remaining) == 1
         assert remaining[0].embedding_semantic

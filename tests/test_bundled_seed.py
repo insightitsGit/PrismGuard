@@ -48,21 +48,27 @@ def test_seven_mined_slabs_refusal_entries_with_provenance() -> None:
 
 
 def test_turns_entries_import_with_canonical_hash() -> None:
+    """Turns entries store joined canonical text and exact authored turn count."""
     pytest.importorskip("prismrag_patch")
     storage = create_storage("memory")
     try:
         parsed = load_bundled_seed(profile="authored")
         turns_entries = [e for e in parsed.entries if e.turns]
-        assert len(turns_entries) >= 2
+        assert len(turns_entries) == 2
+        sample = turns_entries[0]
+        assert sample.canonical_text().count("---TURN---") == len(sample.turns) - 1
+
         report = import_bundled_seed(storage, mode="update", profile="authored")
-        assert report.inserted >= 40
+        assert report.inserted == 40
         stored = storage.vector.list_seed_entries_by_category("payload_splitting")
-        assert any("---TURN---" in row.raw_text for row in stored)
+        assert len(stored) == 4
+        assert all("---TURN---" in row.raw_text for row in stored if "\n---TURN---\n" in row.raw_text)
     finally:
         storage.close()
 
 
-def test_data_exfil_category_documents_output_scan_requirement() -> None:
+def test_data_exfil_category_description_documents_output_scan_gap() -> None:
+    """Documentation-only: output scan is not implemented in the input pipeline yet."""
     parsed = load_bundled_seed(profile="authored")
     cat = next(c for c in parsed.categories if c.slug == "data_exfiltration_via_output")
     assert "OUTPUT-side" in cat.description

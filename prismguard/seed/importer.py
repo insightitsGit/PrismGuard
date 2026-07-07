@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from prismguard.seed.models import ParsedSeed
@@ -11,7 +11,9 @@ from prismguard.seed.normalize import normalize_seed_text, seed_content_hash
 from prismguard.seed.validate import ValidationReport, validate_parsed_seed
 from prismguard.storage.protocols import StorageBackend
 from prismguard.storage.types import CategoryRecord, ImportLogRecord, RuleRecord, SeedEntryRecord
-from prismguard.taxonomy.pipeline import PostSeedReport, run_post_seed_pipeline
+
+if TYPE_CHECKING:
+    from prismguard.taxonomy.pipeline import PostSeedReport
 
 ImportMode = Literal["update", "replace"]
 ImportScope = Literal["all"] | str
@@ -135,13 +137,13 @@ class SeedImporter:
             content_hash = seed_content_hash(entry.category_slug, canonical)
             normalized = normalize_seed_text(canonical)
             existing = existing_index.get(content_hash)
-            content_changed = existing is not None and existing.chunk_text != normalized
+            # Rows are keyed by content hash; edited text produces a new hash and new row id.
             record = SeedEntryRecord(
                 id=existing.id if existing else str(uuid4()),
                 raw_text=canonical,
                 chunk_text=normalized,
-                embedding_semantic=[] if existing is None or content_changed else existing.embedding_semantic,
-                embedding_category=[] if existing is None or content_changed else existing.embedding_category,
+                embedding_semantic=[] if existing is None else existing.embedding_semantic,
+                embedding_category=[] if existing is None else existing.embedding_category,
                 category_slug=entry.category_slug,
                 severity=entry.severity,
                 source=entry.source,
@@ -175,6 +177,8 @@ class SeedImporter:
         )
 
         if not options.skip_taxonomy:
+            from prismguard.taxonomy.pipeline import run_post_seed_pipeline
+
             report.taxonomy = run_post_seed_pipeline(
                 self._storage,
                 parsed,

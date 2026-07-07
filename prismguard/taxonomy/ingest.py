@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from prismguard.storage.protocols import StorageBackend
 from prismguard.storage.types import SeedEntryRecord
 from prismguard.taxonomy.embedder import Embedder
+from prismguard.taxonomy.constants import CATEGORY_VECTOR_DIM
 from prismguard.taxonomy.mapping import TaxonomyEngine
 
 
@@ -29,6 +30,14 @@ def iter_all_seed_entries(storage: StorageBackend):
         yield from storage.vector.list_seed_entries_by_category(category.slug)
 
 
+def _vectors_complete(entry: SeedEntryRecord) -> bool:
+    return bool(
+        entry.embedding_semantic
+        and entry.embedding_category
+        and len(entry.embedding_category) == CATEGORY_VECTOR_DIM
+    )
+
+
 def ingest_seed_vectors(
     storage: StorageBackend,
     engine: TaxonomyEngine,
@@ -44,13 +53,20 @@ def ingest_seed_vectors(
         if not text.strip():
             report.empty_text_skipped += 1
             continue
-        if not force and entry.embedding_semantic and entry.embedding_category:
+        if not force and _vectors_complete(entry):
             report.skipped_already_embedded += 1
             continue
 
         semantic = embedder.embed_semantic(text)
         slug = engine.assign_category(text) or entry.category_slug
-        category_vec = engine.remap_category_vector(text, semantic)
+        category_vec = engine.remap_category_vector(
+            text, semantic, category_slug=slug
+        )
+        if len(category_vec) != CATEGORY_VECTOR_DIM:
+            raise ValueError(
+                f"category vector for entry {entry.id!r} has dim {len(category_vec)}, "
+                f"expected {CATEGORY_VECTOR_DIM}"
+            )
 
         updated = SeedEntryRecord(
             id=entry.id,

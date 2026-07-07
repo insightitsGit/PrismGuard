@@ -33,6 +33,7 @@ class BenignFastPathConfig(BaseModel):
 class TriageThresholds(BaseModel):
     block_threshold: float = 0.78
     allow_threshold: float = 0.42
+    corpus_match_override_threshold: float = 0.92
 
 
 class StructuralConfig(BaseModel):
@@ -66,6 +67,7 @@ class CategoryOverride(BaseModel):
     allow_threshold: float | None = None
     benign_allow_floor: float | None = None
     benign_margin_delta: float | None = None
+    corpus_match_override_threshold: float | None = None
 
 
 class TriageConfig(BaseModel):

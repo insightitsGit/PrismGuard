@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from prismguard.seed.models import ParsedSeed
 from prismguard.storage.protocols import StorageBackend
 from prismguard.storage.types import RuleRecord
+from prismguard.taxonomy.constants import CATEGORY_VECTOR_DIM
+
+if TYPE_CHECKING:
+    from prismguard.seed.models import ParsedSeed
 
 try:
+    from prismrag_patch.config import EMBED_DIM_SEMANTIC
     from prismrag_patch.core import PrismRAGPatch
+    from prismrag_patch.mapping.projection import project_sem_to_personal
     from prismrag_patch.mapping.rules import RulesStrategy
     from prismrag_patch.models import MappingConfig
 
@@ -18,7 +24,11 @@ except ImportError:  # pragma: no cover
     PrismRAGPatch = None  # type: ignore[misc, assignment]
     RulesStrategy = None  # type: ignore[misc, assignment]
     MappingConfig = None  # type: ignore[misc, assignment]
+    project_sem_to_personal = None  # type: ignore[misc, assignment]
+    EMBED_DIM_SEMANTIC = 768
     _HAS_PRISMRAG = False
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -34,21 +44,63 @@ class TaxonomyEngine:
     benign_category: str = "benign_adjacent"
     _substring_rules: list[tuple[str, str]] = field(default_factory=list)
 
+    def _substring_match_scores(self, text: str) -> dict[str, int]:
+        lower = text.lower()
+        scores: dict[str, int] = {}
+        for word, cat in self._substring_rules:
+            if re.search(rf"\b{re.escape(word)}\b", lower):
+                scores[cat] = scores.get(cat, 0) + 1
+        return scores
+
     def assign_category(self, text: str) -> str | None:
         slug = self.strategy.infer_category_from_text(text)  # type: ignore[union-attr]
         if slug:
             return slug
-        lower = text.lower()
-        scores: dict[str, int] = {}
-        for word, cat in self._substring_rules:
-            if word in lower:
-                scores[cat] = scores.get(cat, 0) + 1
+        scores = self._substring_match_scores(text)
         if not scores:
             return None
         return max(scores, key=lambda s: scores[s])
 
-    def remap_category_vector(self, text: str, semantic_vector: list[float]) -> list[float]:
-        return self.patch.remap_vector(semantic_vector, text)  # type: ignore[union-attr]
+    def remap_category_vector(
+        self,
+        text: str,
+        semantic_vector: list[float],
+        *,
+        category_slug: str | None = None,
+    ) -> list[float]:
+        result = self.patch.remap_vector(semantic_vector, text)  # type: ignore[union-attr]
+        if len(result) == CATEGORY_VECTOR_DIM:
+            return result
+
+        slug = category_slug or self.assign_category(text)
+        if slug:
+            augmented = f"{text} {' '.join(slug.split('_'))}"
+            result = self.patch.remap_vector(semantic_vector, augmented)  # type: ignore[union-attr]
+            if len(result) == CATEGORY_VECTOR_DIM:
+                return result
+
+            if project_sem_to_personal is not None and len(semantic_vector) == EMBED_DIM_SEMANTIC:
+                slugs = [c["slug"] for c in self.mapping_dict.get("categories", [])]
+                if slug in slugs:
+                    import numpy as np
+
+                    projected = project_sem_to_personal(
+                        np.asarray(semantic_vector, dtype=float),
+                        slug,
+                        slugs,
+                    )
+                    return [float(x) for x in projected]
+
+        from prismguard.taxonomy.embedder import _pool_dims
+
+        pooled = _pool_dims(semantic_vector, CATEGORY_VECTOR_DIM)
+        log.debug(
+            "category vector projection fallback for text=%r slug=%r dim=%d",
+            text[:80],
+            slug,
+            len(pooled),
+        )
+        return pooled
 
     def match_tier1(self, text: str) -> RuleRecord | None:
         for rule in self.regex_rules:

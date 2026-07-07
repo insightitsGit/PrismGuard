@@ -1,6 +1,29 @@
 from __future__ import annotations
 
+import logging
+
 from prismguard.seed.models import CategorySeed, EntrySeed, ParsedSeed, RuleSeed
+
+log = logging.getLogger(__name__)
+
+_AUTHORED_SOURCE_MARKERS = ("seed-v0", "authored", "design-doc", "mined-slabs")
+
+
+def _source_priority(entry: EntrySeed) -> int:
+    source = entry.source.lower()
+    if any(marker in source for marker in _AUTHORED_SOURCE_MARKERS):
+        return 2
+    if "authored" in entry.source_file.lower():
+        return 2
+    return 1
+
+
+def _entry_metadata_differs(left: EntrySeed, right: EntrySeed) -> bool:
+    return (
+        left.severity != right.severity
+        or left.source != right.source
+        or (left.notes or "") != (right.notes or "")
+    )
 
 
 def merge_parsed_seeds(parts: list[ParsedSeed]) -> ParsedSeed:
@@ -46,7 +69,38 @@ def merge_parsed_seeds(parts: list[ParsedSeed]) -> ParsedSeed:
             from prismguard.seed.normalize import seed_content_hash
 
             key = seed_content_hash(entry.category_slug, entry.canonical_text())
-            entries[key] = entry
+            existing_entry = entries.get(key)
+            if existing_entry is None:
+                entries[key] = entry
+                continue
+            if not _entry_metadata_differs(existing_entry, entry):
+                continue
+
+            existing_priority = _source_priority(existing_entry)
+            incoming_priority = _source_priority(entry)
+            if incoming_priority > existing_priority:
+                log.warning(
+                    "authored seed supersedes external duplicate hash=%s kept source=%r over %r",
+                    key,
+                    entry.source,
+                    existing_entry.source,
+                )
+                entries[key] = entry
+            elif incoming_priority < existing_priority:
+                log.warning(
+                    "authored seed kept over external duplicate hash=%s kept source=%r over %r",
+                    key,
+                    existing_entry.source,
+                    entry.source,
+                )
+            else:
+                log.warning(
+                    "duplicate seed entry hash=%s later source=%r supersedes %r",
+                    key,
+                    entry.source,
+                    existing_entry.source,
+                )
+                entries[key] = entry
 
     return ParsedSeed(
         categories=list(categories.values()),

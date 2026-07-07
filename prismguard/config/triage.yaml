@@ -22,6 +22,7 @@ benign_fast_path:
 triage:
   block_threshold: 0.78
   allow_threshold: 0.42
+  corpus_match_override_threshold: 0.92
 
 structural:
   structural_block_threshold: 0.85

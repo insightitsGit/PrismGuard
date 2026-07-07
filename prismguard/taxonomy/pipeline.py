@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from prismguard.seed.models import ParsedSeed
 from prismguard.storage.protocols import StorageBackend
 from prismguard.taxonomy.embedder import Embedder, create_embedder
-from prismguard.taxonomy.ingest import IngestReport, ingest_seed_vectors, iter_all_seed_entries
-from prismguard.taxonomy.mapping import TaxonomyEngine, build_mapping_after_import, build_mapping_from_parsed_seed
+from prismguard.taxonomy.ingest import IngestReport, ingest_seed_vectors
+from prismguard.taxonomy.mapping import TaxonomyEngine, build_mapping_after_import
 from prismguard.taxonomy.report import CoverageReport, build_coverage_report, estimate_llm_reduction
+
+if TYPE_CHECKING:
+    from prismguard.seed.models import ParsedSeed
 
 
 @dataclass

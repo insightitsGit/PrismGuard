@@ -6,6 +6,7 @@ import unicodedata
 
 _ZERO_WIDTH = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]")
 _B64_LIKE = re.compile(r"(?:[A-Za-z0-9+/]{20,}={0,2})")
+_HEX_EMBEDDED = re.compile(r"0x[0-9a-fA-F]{6,}")
 
 
 def normalize_prompt(text: str, *, max_obfuscation_depth: int = 3) -> str:
@@ -34,9 +35,13 @@ def _try_decode_layer(text: str) -> str | None:
         except (ValueError, UnicodeDecodeError):
             pass
 
-    if text.startswith(("0x", "0X")) and len(text) > 4:
+    hex_match = _HEX_EMBEDDED.search(text)
+    if hex_match:
+        token = hex_match.group(0)
         try:
-            return bytes.fromhex(text[2:]).decode("utf-8")
+            decoded = bytes.fromhex(token[2:]).decode("utf-8")
+            if decoded and decoded != token:
+                return text.replace(token, decoded, 1)
         except (ValueError, UnicodeDecodeError):
             pass
     return None
