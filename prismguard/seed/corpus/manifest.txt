@@ -2,6 +2,9 @@
 # Import: prismguard-seed import --bundled --profile full
 
 authored/seed.yaml
+external/neuralchemy/core-train.parquet
+external/neuralchemy/core-validation.parquet
+external/neuralchemy/core-test.parquet
 external/s-labs/train.csv
 external/s-labs/validation.csv
 external/s-labs/test.csv

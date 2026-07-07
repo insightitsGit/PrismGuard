@@ -6,13 +6,14 @@ from pathlib import Path
 from prismguard.seed.formats.csv_entries import parse_csv_entries
 from prismguard.seed.formats.jsonl_entries import parse_jsonl_entries
 from prismguard.seed.formats.markdown_seed import parse_markdown_seed
+from prismguard.seed.formats.neuralchemy_parquet import parse_neuralchemy_parquet
 from prismguard.seed.formats.slabs_csv import parse_slabs_csv
 from prismguard.seed.formats.yaml_taxonomy import parse_json_taxonomy, parse_yaml_or_json_taxonomy
 from prismguard.seed.formats.yanismiraoui_csv import parse_yanismiraoui_csv
 from prismguard.seed.merge import merge_parsed_seeds
 from prismguard.seed.models import ParsedSeed
 
-SUPPORTED_EXTENSIONS = {".yaml", ".yml", ".json", ".csv", ".jsonl", ".md", ".markdown"}
+SUPPORTED_EXTENSIONS = {".yaml", ".yml", ".json", ".csv", ".jsonl", ".md", ".markdown", ".parquet"}
 FormatName = str
 
 
@@ -39,6 +40,8 @@ def detect_format(path: Path, explicit: FormatName = "auto") -> FormatName:
         return _detect_csv_format(path)
     if suffix == ".jsonl":
         return "jsonl"
+    if suffix == ".parquet":
+        return "neuralchemy_parquet"
     if suffix in (".md", ".markdown"):
         return "markdown"
     text = path.read_text(encoding="utf-8")[:4096]
@@ -68,6 +71,8 @@ def parse_seed_file(path: Path, *, format_name: FormatName = "auto") -> ParsedSe
         parsed = parse_slabs_csv(resolved)
     elif fmt == "yanismiraoui_csv":
         parsed = parse_yanismiraoui_csv(resolved)
+    elif fmt == "neuralchemy_parquet":
+        parsed = parse_neuralchemy_parquet(resolved)
     elif fmt == "jsonl":
         parsed = parse_jsonl_entries(resolved)
     elif fmt == "markdown":

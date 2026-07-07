@@ -152,6 +152,62 @@ def test_dry_run_writes_nothing(taxonomy_yaml: Path, entries_csv: Path) -> None:
         parsed = parse_seed_sources([taxonomy_yaml, entries_csv])
         report = import_seeds(storage, parsed, mode="update", dry_run=True)
         assert report.dry_run is True
+        assert report.taxonomy is None
         assert storage.relational.list_categories() == []
+    finally:
+        storage.close()
+
+
+def test_import_runs_taxonomy_after_update(taxonomy_yaml: Path, entries_csv: Path) -> None:
+    pytest.importorskip("prismrag_patch")
+    storage = create_storage("memory")
+    try:
+        parsed = parse_seed_sources([taxonomy_yaml, entries_csv])
+        report = import_seeds(storage, parsed, mode="update")
+        assert report.taxonomy is not None
+        assert report.taxonomy.ingest.embedded == 2
+        for entry in storage.vector.list_seed_entries_by_category("direct_instruction_override"):
+            assert entry.embedding_semantic
+            assert entry.embedding_category
+    finally:
+        storage.close()
+
+
+def test_import_runs_taxonomy_after_replace_scope(taxonomy_yaml: Path, entries_csv: Path) -> None:
+    pytest.importorskip("prismrag_patch")
+    storage = create_storage("memory")
+    try:
+        parsed = parse_seed_sources([taxonomy_yaml, entries_csv])
+        import_seeds(storage, parsed, mode="update")
+
+        replacement_csv = entries_csv.parent / "replacement.csv"
+        replacement_csv.write_text(
+            'text,category_slug,severity,source\n'
+            '"New override only.",direct_instruction_override,high,replacement\n',
+            encoding="utf-8",
+        )
+        replacement = parse_seed_sources([replacement_csv])
+        report = import_seeds(
+            storage,
+            replacement,
+            mode="replace",
+            scope="category:direct_instruction_override",
+        )
+        assert report.taxonomy is not None
+        remaining = storage.vector.list_seed_entries_by_category("direct_instruction_override")
+        assert len(remaining) == 1
+        assert remaining[0].embedding_semantic
+    finally:
+        storage.close()
+
+
+def test_skip_taxonomy_opt_out(taxonomy_yaml: Path, entries_csv: Path) -> None:
+    storage = create_storage("memory")
+    try:
+        parsed = parse_seed_sources([taxonomy_yaml, entries_csv])
+        report = import_seeds(storage, parsed, mode="update", skip_taxonomy=True)
+        assert report.taxonomy is None
+        for entry in storage.vector.list_seed_entries_by_category("direct_instruction_override"):
+            assert not entry.embedding_semantic
     finally:
         storage.close()

@@ -58,16 +58,28 @@ def parse_yaml_or_json_taxonomy(path: Path, raw: str | None = None) -> ParsedSee
 
     entries: list[EntrySeed] = []
     for item in _as_list(data.get("entries")):
-        if not isinstance(item, dict) or "text" not in item or "category_slug" not in item:
+        if not isinstance(item, dict) or "category_slug" not in item:
             raise ValueError(f"Invalid entry in {path}")
+        turns_raw = item.get("turns")
+        turns = [str(t) for t in _as_list(turns_raw)] if turns_raw is not None else None
+        if turns:
+            text = str(item.get("text", ""))
+        elif "text" in item:
+            text = str(item["text"])
+        else:
+            raise ValueError(f"Entry requires text or turns in {path}")
         entries.append(
             EntrySeed(
-                text=str(item["text"]),
+                text=text,
                 category_slug=str(item["category_slug"]),
                 severity=str(item.get("severity", "medium")),  # type: ignore[arg-type]
                 source=str(item.get("source", "yaml-import")),
                 rule_id=str(item["rule_id"]) if item.get("rule_id") else None,
                 notes=str(item["notes"]) if item.get("notes") else None,
+                turns=turns,
+                secondary_category_slugs=[
+                    str(s) for s in _as_list(item.get("secondary_category_slugs"))
+                ],
             )
         )
 

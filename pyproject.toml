@@ -63,9 +63,13 @@ dev = [
     "pytest-cov>=5.0.0",
     "mypy>=1.10.0",
     "ruff>=0.4.0",
+    "prismguard[seed,prism]",
+]
+seed = [
+    "pyarrow>=14.0",
 ]
 all = [
-    "prismguard[pgvector,chroma,pinecone,weaviate,guard-model,dev]",
+    "prismguard[pgvector,chroma,pinecone,weaviate,guard-model,seed,dev]",
 ]
 
 [project.scripts]

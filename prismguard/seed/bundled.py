@@ -49,6 +49,8 @@ def import_bundled_seed(
     dry_run: bool = False,
     confirm_replace_all: bool = False,
     profile: BundledProfile = "authored",
+    skip_taxonomy: bool = False,
+    force_embed: bool = False,
 ) -> ImportReport:
     """Import the packaged seed corpus (authored-only or full with external datasets)."""
     parsed = load_bundled_seed(profile=profile)
@@ -59,6 +61,8 @@ def import_bundled_seed(
         scope=scope,
         dry_run=dry_run,
         confirm_replace_all=confirm_replace_all,
+        skip_taxonomy=skip_taxonomy,
+        force_embed=force_embed,
     )
 
 

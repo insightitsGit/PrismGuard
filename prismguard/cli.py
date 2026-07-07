@@ -9,6 +9,7 @@ from prismguard.seed import import_bundled_seed, load_bundled_seed
 from prismguard.seed.importer import import_seeds
 from prismguard.seed.parse import parse_seed_sources
 from prismguard.storage import create_storage, create_storage_from_env
+from prismguard.taxonomy.pipeline import PostSeedReport
 
 
 def _storage_for_cli(backend: str | None):
@@ -19,6 +20,20 @@ def _storage_for_cli(backend: str | None):
     if os.environ.get("PRISMGUARD_STORAGE_DSN"):
         return create_storage("pgvector", dsn=os.environ["PRISMGUARD_STORAGE_DSN"])
     return create_storage("memory")
+
+
+def _taxonomy_output(taxonomy_report: PostSeedReport) -> dict:
+    return {
+        "embedder": taxonomy_report.embedder_name,
+        "ingest": {
+            "total_entries": taxonomy_report.ingest.total_entries,
+            "embedded": taxonomy_report.ingest.embedded,
+            "skipped_already_embedded": taxonomy_report.ingest.skipped_already_embedded,
+            "duration_seconds": round(taxonomy_report.ingest.duration_seconds, 3),
+        },
+        "coverage": taxonomy_report.coverage.to_dict(),
+        "llm_reduction_estimate": taxonomy_report.llm_reduction,
+    }
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -72,6 +87,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Storage backend override (default from PRISMGUARD_STORAGE_BACKEND or memory)",
     )
+    import_cmd.add_argument(
+        "--skip-taxonomy",
+        action="store_true",
+        help="Skip post-import prismRAG taxonomy mapping + dual-vector embed",
+    )
+    import_cmd.add_argument(
+        "--force-embed",
+        action="store_true",
+        help="Re-embed all seed entries even if vectors already exist",
+    )
     return parser
 
 
@@ -96,6 +121,8 @@ def main(argv: list[str] | None = None) -> None:
                 dry_run=args.dry_run,
                 confirm_replace_all=args.confirm_replace_all,
                 profile=args.profile,
+                skip_taxonomy=args.skip_taxonomy,
+                force_embed=args.force_embed,
             )
         else:
             parsed = parse_seed_sources(args.sources, format_name=args.format, recursive=args.recursive)
@@ -107,11 +134,13 @@ def main(argv: list[str] | None = None) -> None:
                 dry_run=args.dry_run,
                 confirm_replace_all=args.confirm_replace_all,
                 force=args.force,
+                skip_taxonomy=args.skip_taxonomy,
+                force_embed=args.force_embed,
             )
     finally:
         storage.close()
 
-    print(json.dumps({
+    output: dict = {
         "mode": report.mode,
         "scope": report.scope,
         "source_files": report.source_files,
@@ -121,7 +150,11 @@ def main(argv: list[str] | None = None) -> None:
         "errored": report.errored,
         "dry_run": report.dry_run,
         "warnings": report.warnings,
-    }, indent=2))
+    }
+    if report.taxonomy is not None:
+        output["taxonomy"] = _taxonomy_output(report.taxonomy)
+
+    print(json.dumps(output, indent=2))
 
     if report.errored:
         sys.exit(1)

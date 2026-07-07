@@ -1,12 +1,25 @@
 # Seed Manifest
 
-What's in this folder, where it came from, its license, and what still needs to happen before it's fully imported. Fetched/verified 2026-07-06 directly from each source's Hugging Face API metadata (license, row counts, schema) — not from memory or the earlier research pass.
+What's in this folder, where it came from, its license, and import behavior. Verified 2026-07-06 against each source's Hugging Face metadata.
+
+---
+
+## Two-layer gap fix (seed content + importer code)
+
+The four taxonomy gaps were addressed at **two layers** that complement each other:
+
+| Gap | Seed-content layer (`authored/seed.yaml`) | Code layer (`prismguard/seed/formats/`) |
+|---|---|---|
+| **`refusal_suppression`** | 7 rows **mined** from `external/s-labs/train.csv` malicious hits (`source: mined-slabs`), with `notes` flagging co-occurring categories (multi-label TBD) | `slabs_csv.py` heuristic re-labels matching `label=1` rows at import |
+| **`context_overflow`** | Added as its own category (not folded into neighbors); bridged to `encoding_obfuscation` + `payload_splitting` | `neuralchemy_parquet.py` maps `context_confusion` → `context_overflow` |
+| **`payload_splitting`** | `turns: [msg1, msg2]` entries document the real attack shape; single-text rows kept as approximations only | `EntrySeed.turns` + `canonical_text()` in `models.py`; `neuralchemy` `payload_injection` mapping; S-Labs split heuristic |
+| **`data_exfiltration_via_output`** | Category `description` states this is an **output-scan** problem, not solvable by input examples alone | `neuralchemy` `output_manipulation`/`response_manipulation` mapping; S-Labs exfil heuristic for input-side instruct-to-leak prompts |
 
 ---
 
 ## `authored/` — ours, no license restriction
 
-**`seed.yaml`** — the v0 taxonomy (10 categories, bridges), 5 starter Tier-1 rules, and ~24 hand-written examples from `docs/prismguard-design.md` Part 5/6. Written by the design team specifically for this product — safe to import, modify, and redistribute without any external license concern.
+**`seed.yaml`** — taxonomy (12 categories including `context_overflow` and `unclassified_imported`), Tier-1 rules, hand-written examples, and multi-turn `turns` entries for `payload_splitting`.
 
 ```
 prismguard-seed import prismguard/seed/corpus/authored/seed.yaml --format yaml --mode update
@@ -14,62 +27,81 @@ prismguard-seed import prismguard/seed/corpus/authored/seed.yaml --format yaml -
 
 ---
 
-## `external/` — real datasets, license-checked, downloaded 2026-07-06
+## `external/` — real datasets, license-checked
 
-| Source | License | Rows | Format | Schema |
+| Source | License | Rows | Format | Import handler |
 |---|---|---|---|---|
-| [S-Labs/prompt-injection-dataset](https://huggingface.co/datasets/S-Labs/prompt-injection-dataset) | **MIT** | 11,091 train / 2,101 val / 2,101 test | CSV | `text, label` (binary: 0=benign, 1=injection) |
-| [neuralchemy/Prompt-injection-dataset](https://huggingface.co/datasets/neuralchemy/Prompt-injection-dataset) (`core` config) | **Apache-2.0** | 4,391 train / 941 val / 942 test | Parquet | `text, label, category, severity, group_id, augmented, tags` |
-| [yanismiraoui/prompt_injections](https://huggingface.co/datasets/yanismiraoui/prompt_injections) | **Apache-2.0** | 1,034 | CSV | single column, multilingual attack text, no labels |
+| [neuralchemy/Prompt-injection-dataset](https://huggingface.co/datasets/neuralchemy/Prompt-injection-dataset) (`core`) | **Apache-2.0** | 4,391 / 941 / 942 | Parquet | `neuralchemy_parquet.py` |
+| [S-Labs/prompt-injection-dataset](https://huggingface.co/datasets/S-Labs/prompt-injection-dataset) | **MIT** | 11,091 / 2,101 / 2,101 | CSV | `slabs_csv.py` + heuristic re-label |
+| [yanismiraoui/prompt_injections](https://huggingface.co/datasets/yanismiraoui/prompt_injections) | **Apache-2.0** | 1,034 | CSV | `yanismiraoui_csv.py` |
 
-All three are safe for a commercial product under their stated licenses (verify no downstream terms changed since 2026-07-06 before a production release).
+Requires `pip install prismguard[seed]` (pulls `pyarrow` for parquet).
 
-### neuralchemy → PrismGuard category mapping (best schema match — do this one first)
+### neuralchemy → PrismGuard mapping (implemented)
 
-This dataset already ships `category` and `severity` columns, so it needs a **rename**, not manual re-labeling:
-
-| neuralchemy `category` | → PrismGuard `category_slug` |
+| neuralchemy `category` | PrismGuard `category_slug` |
 |---|---|
-| `direct_injection` | `direct_instruction_override` |
+| `direct_injection`, `instruction_override`, `prompt_injection`, `system_manipulation` | `direct_instruction_override` |
 | `jailbreak`, `persona_replacement` | `roleplay_jailbreak` |
-| `system_extraction`, `prompt_leaking` | `system_prompt_exfiltration` |
-| `encoding_obfuscation`, `token_smuggling` | `encoding_obfuscation` |
-| `crescendo`, `many_shot` | `multi_turn_escalation` |
-| `indirect_injection` | `indirect_injection` |
+| `system_extraction`, `prompt_extraction`, `training_extraction`, `model_fingerprinting` | `system_prompt_exfiltration` |
+| `encoding`, `encoding_obfuscation`, `token_smuggling`, `token_injection` | `encoding_obfuscation` |
+| `crescendo`, `many_shot`, `multi_turn` | `multi_turn_escalation` |
+| `indirect_injection`, `rag_poisoning`, `agent_manipulation` | `indirect_injection` |
+| `context_confusion` | **`context_overflow`** (added to taxonomy) |
+| `output_manipulation`, `response_manipulation` | **`data_exfiltration_via_output`** |
+| `payload_injection` | **`payload_splitting`** |
 | `benign` | `benign_adjacent` |
-| `context_overflow` | **no current mapping — see Gaps below** |
+| `adversarial`, `edge_case`, `control`, `code_execution`, `chain_of_thought` | `unclassified_imported` (staging) |
 
-`severity` values (`low/medium/high/critical`) map directly, no transform needed. `label` (0/1) is redundant once `category_slug` is set but useful as a sanity check during import validation.
+### S-Labs heuristic re-label (implemented)
 
-### S-Labs and yanismiraoui → require re-categorization
+Binary `label=1` rows are re-scanned before staging:
 
-Neither ships a `category` field — S-Labs is binary (benign/injection) only, yanismiraoui is unlabeled attack text. Import these as `category_slug: unclassified_imported` (a staging category, not a real taxonomy category — add it as `is_attack_category: null` so the runtime never triages against it directly) and route through the Tier-1 rule set for auto-assignment, then human-review whatever the rules don't confidently classify. Don't bulk-assign these to a real attack category without that pass — that's exactly the kind of ungrounded taxonomy write the design doc's anti-poisoning principle (Part 8) warns against, even though this is pre-launch seed data rather than live feedback.
-
----
-
-## Deliberately NOT downloaded — read before deciding whether to revisit
-
-| Source | Why it's not here |
+| Heuristic | → category |
 |---|---|
-| [Necent/llm-jailbreak-prompt-injection-dataset](https://huggingface.co/datasets/Necent/llm-jailbreak-prompt-injection-dataset) | MIT-licensed and aggregates 30+ safety datasets, but **1.01 GB** across 4 parquet shards — too large to pull wholesale into a git repo without a real reason. If you want this one, sample it via the `datasets` library's streaming mode (`load_dataset(..., streaming=True)`) and pull a bounded subset rather than the full file — don't just re-run the curl commands used for the others. |
-| [Mindgard/evaded-prompt-injection-and-jailbreak-samples](https://huggingface.co/datasets/Mindgard/evaded-prompt-injection-and-jailbreak-samples) | **Gated** — its data file requires an authenticated, approved Hugging Face account (the metadata page is public, the actual parquet is not). It is also **CC-BY-NC-4.0** — non-commercial — so even after gaining access, it cannot be used to seed a commercial product's corpus without a separate license from Mindgard. Useful only as an internal/research-only test set for evaluating graph-expansion coverage against adversarially-evaded samples (its actual purpose per its paper), never as shipped training/seed data. |
-| [JailbreakBench (JBB-Behaviors)](https://arxiv.org/pdf/2410.22770) | Not fetched as seed data on purpose — per `docs/prismguard-design.md` Part 10 (T10), this belongs in the **held-out benchmark set**, not the training/seed corpus, so thresholds aren't tuned on the same data used to evaluate them. |
+| refusal-suppression phrasing (`must comply`, `never refuse`, …) | `refusal_suppression` |
+| output-channel exfil phrasing (`markdown image`, `base64` in response, …) | `data_exfiltration_via_output` |
+| split-payload phrasing (`part N of`, `execute X`, …) | `payload_splitting` |
+| otherwise | `unclassified_imported` |
+
+### yanismiraoui
+
+Unlabeled multilingual attacks → `unclassified_imported` (no category column to trust).
 
 ---
 
-## Taxonomy gaps these sources don't cover
+## Taxonomy gaps — status after fix (2026-07-06)
 
-Confirmed by actually reading each dataset's category list, not assumed:
+| Gap | Resolution |
+|---|---|
+| **`context_overflow`** | Added to taxonomy; neuralchemy `context_confusion` rows map here |
+| **`data_exfiltration_via_output`** | neuralchemy `output_manipulation` / `response_manipulation` + S-Labs heuristic + authored examples. **Note:** category also needs an output-side runtime scan — input pipeline alone is insufficient for production |
+| **`refusal_suppression`** | S-Labs heuristic + authored/mined examples; not a distinct label in external datasets |
+| **`payload_splitting`** | neuralchemy `payload_injection` + S-Labs heuristic + authored `turns` entries (multi-turn schema). Session-level runtime detection still required for production |
 
-- **`payload_splitting`** — no source here represents cross-message split attacks. Single-message datasets can't capture this by construction.
-- **`data_exfiltration_via_output`** — none of the three imported sources have this as a labeled category.
-- **`refusal_suppression`** — not a distinct label in any source; may be present as unlabeled text within `direct_injection`/`jailbreak` rows but not extractable without re-reading each row.
-- **`context_overflow`** (neuralchemy has this, PrismGuard's taxonomy doesn't) — worth a decision: add it as an 11th category, or fold it into `encoding_obfuscation`/`payload_splitting` as a sub-case. Flagging rather than deciding here.
-
-These four categories still need hand-authored or red-team-sourced examples beyond what's in `authored/seed.yaml` — the public datasets are strongest on single-message direct/jailbreak/exfiltration attacks and weak on everything structural or cross-turn.
+No public dataset fully represents cross-turn split attacks by construction — `turns` entries and session runtime (handoff Part D, T8b) cover what single-field imports cannot.
 
 ---
 
-## Next step
+## Import order (`manifest.txt`)
 
-Run the importer (once built per `handoffs/handoffPrismGuardImplementation.md` Part B) in this order: `authored/seed.yaml` first (defines the categories everything else references), then `external/neuralchemy/*` (best schema match), then `external/s-labs/*` and `external/yanismiraoui/*` staged into `unclassified_imported` pending the rule-based/human-reviewed re-categorization pass described above.
+```
+authored/seed.yaml
+external/neuralchemy/core-{train,validation,test}.parquet
+external/s-labs/{train,validation,test}.csv
+external/yanismiraoui/prompt_injections.csv
+```
+
+```bash
+prismguard-seed import --bundled --profile full   # requires prismguard[seed]
+```
+
+---
+
+## Deliberately NOT bundled
+
+| Source | Why |
+|---|---|
+| Necent (1 GB) | Too large — stream a bounded subset if needed |
+| Mindgard | Gated + **CC-BY-NC-4.0** (non-commercial) |
+| JailbreakBench | Held-out benchmark only (design doc Part 10) |

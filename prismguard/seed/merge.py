@@ -45,7 +45,7 @@ def merge_parsed_seeds(parts: list[ParsedSeed]) -> ParsedSeed:
         for entry in part.entries:
             from prismguard.seed.normalize import seed_content_hash
 
-            key = seed_content_hash(entry.category_slug, entry.text)
+            key = seed_content_hash(entry.category_slug, entry.canonical_text())
             entries[key] = entry
 
     return ParsedSeed(

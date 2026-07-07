@@ -11,6 +11,7 @@ from prismguard.seed.normalize import normalize_seed_text, seed_content_hash
 from prismguard.seed.validate import ValidationReport, validate_parsed_seed
 from prismguard.storage.protocols import StorageBackend
 from prismguard.storage.types import CategoryRecord, ImportLogRecord, RuleRecord, SeedEntryRecord
+from prismguard.taxonomy.pipeline import PostSeedReport, run_post_seed_pipeline
 
 ImportMode = Literal["update", "replace"]
 ImportScope = Literal["all"] | str
@@ -43,6 +44,7 @@ class ImportReport:
     errored: int = 0
     warnings: list[str] = field(default_factory=list)
     dry_run: bool = False
+    taxonomy: PostSeedReport | None = None
 
     @property
     def net_changes(self) -> int:
@@ -56,6 +58,8 @@ class ImportOptions:
     dry_run: bool = False
     confirm_replace_all: bool = False
     force: bool = False
+    skip_taxonomy: bool = False
+    force_embed: bool = False
 
 
 class SeedImporter:
@@ -125,15 +129,19 @@ class SeedImporter:
         existing_index = self._build_entry_index()
 
         for entry in parsed.entries:
-            content_hash = seed_content_hash(entry.category_slug, entry.text)
-            normalized = normalize_seed_text(entry.text)
+            canonical = entry.canonical_text()
+            if not canonical:
+                continue
+            content_hash = seed_content_hash(entry.category_slug, canonical)
+            normalized = normalize_seed_text(canonical)
             existing = existing_index.get(content_hash)
+            content_changed = existing is not None and existing.chunk_text != normalized
             record = SeedEntryRecord(
                 id=existing.id if existing else str(uuid4()),
-                raw_text=entry.text,
+                raw_text=canonical,
                 chunk_text=normalized,
-                embedding_semantic=existing.embedding_semantic if existing else [],
-                embedding_category=existing.embedding_category if existing else [],
+                embedding_semantic=[] if existing is None or content_changed else existing.embedding_semantic,
+                embedding_category=[] if existing is None or content_changed else existing.embedding_category,
                 category_slug=entry.category_slug,
                 severity=entry.severity,
                 source=entry.source,
@@ -165,6 +173,14 @@ class SeedImporter:
                 created_at=datetime.now(UTC),
             )
         )
+
+        if not options.skip_taxonomy:
+            report.taxonomy = run_post_seed_pipeline(
+                self._storage,
+                parsed,
+                force_embed=options.force_embed,
+            )
+
         return report
 
     def _build_entry_index(self) -> dict[str, SeedEntryRecord]:
@@ -193,6 +209,8 @@ def import_seeds(
     dry_run: bool = False,
     confirm_replace_all: bool = False,
     force: bool = False,
+    skip_taxonomy: bool = False,
+    force_embed: bool = False,
 ) -> ImportReport:
     importer = SeedImporter(storage)
     return importer.import_parsed(
@@ -203,5 +221,7 @@ def import_seeds(
             dry_run=dry_run,
             confirm_replace_all=confirm_replace_all,
             force=force,
+            skip_taxonomy=skip_taxonomy,
+            force_embed=force_embed,
         ),
     )

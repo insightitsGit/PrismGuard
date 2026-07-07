@@ -17,10 +17,12 @@ The bundled seed corpus ships inside the installed package at:
 ## Quick start
 
 ```bash
-# Authored seed only (~30 examples, default)
+pip install prismguard[seed]   # pyarrow for neuralchemy parquet
+
+# Authored seed only (~40 examples, default)
 prismguard-seed import --bundled
 
-# Full corpus including external datasets (~15k+ rows)
+# Full corpus including external datasets (~30k+ rows, all taxonomy gaps filled)
 prismguard-seed import --bundled --profile full
 ```
 

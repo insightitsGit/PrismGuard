@@ -31,13 +31,22 @@ class RuleSeed:
 
 @dataclass
 class EntrySeed:
-    text: str
-    category_slug: str
+    text: str = ""
+    category_slug: str = ""
     severity: Severity = "medium"
     source: str = "import"
     rule_id: str | None = None
     notes: str | None = None
     source_file: str = ""
+    turns: list[str] | None = None
+
+    secondary_category_slugs: list[str] = field(default_factory=list)
+
+    def canonical_text(self) -> str:
+        """Single string used for normalization, hashing, and storage."""
+        if self.turns:
+            return "\n---TURN---\n".join(t.strip() for t in self.turns if t.strip())
+        return self.text.strip()
 
 
 @dataclass

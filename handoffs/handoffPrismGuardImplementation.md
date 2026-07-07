@@ -426,6 +426,8 @@ prismguard-seed import @seed-manifest.txt --mode replace --scope all --confirm-r
 
 **Exit:** `--dry-run` produces a diff report and writes nothing; **multi-source** `taxonomy.yaml + entries.csv` merges and imports; `update` twice is a no-op the second time; `replace --scope=category:X` removes only category X's prior rows; `replace --scope=all` without `--confirm-replace-all` refuses; `@manifest` and directory sources work; malformed regex aborts with clear error.
 
+**Implemented extra (T4+T7 hook):** after every successful import (`update` **and** `replace`, any scope), taxonomy ingest runs automatically inside `import_seeds()` / `SeedImporter.import_parsed()` — not a separate manual step. Skipped on `--dry-run`. See **Extras — auto-taxonomy** below.
+
 ### T5 — Load the real seed as the first import
 
 **Files:** bundled corpus lives in `prismguard/seed/corpus/` (`authored/seed.yaml`, `external/*`, manifests) — **shipped with the package via setuptools package-data**
@@ -462,6 +464,45 @@ Run every seed row through prismRAG's ingest pipeline to produce dual vectors. P
 **Variant expansion (I.10):** for `severity: high` attack-category entries, generate leetspeak/homoglyph/base64 variant rows (`source: variant_expansion`); dedupe by normalized hash; optional `--expand-variants` on import.
 
 **Exit:** every seed entry has both vectors populated in Postgres; a spot-check query (nearest neighbor for a known jailbreak phrase) returns entries from the correct category, not a topically-adjacent wrong one; at least one obfuscated variant of a high-severity seed is retrievable via ANN.
+
+#### Extras — auto-taxonomy after import (implemented)
+
+Taxonomy is **not** a separate CLI step. It is wired into the import functions so every real write path ends with prismRAG mapping + dual-vector embed:
+
+| Layer | Behavior |
+|-------|----------|
+| `SeedImporter.import_parsed()` | Calls `run_post_seed_pipeline()` after import log, unless `skip_taxonomy=True` or `dry_run=True` |
+| `import_seeds()` | Passes `skip_taxonomy`, `force_embed` through to importer |
+| `import_bundled_seed()` | Same — bundled path uses `import_seeds()` internally |
+| `ImportReport` | New field `taxonomy: PostSeedReport \| None` — CLI JSON includes `taxonomy` block when present |
+
+**Mapping source:** `build_mapping_after_import(storage, parsed)` — categories/rules read from **storage** (authoritative after write); `bridges_to` merged from parsed seed YAML.
+
+**Embed idempotency:** entries with both vectors populated are skipped unless `force_embed=True`. If entry `chunk_text` changes on update/replace, embeddings are cleared and re-embedded on the next taxonomy pass.
+
+**CLI flags (updated):**
+
+```bash
+prismguard-seed import --bundled --profile authored          # taxonomy runs by default
+prismguard-seed import --bundled --profile full              # ~22k rows + auto embed
+prismguard-seed import fixes/batch.csv --skip-taxonomy       # opt out
+prismguard-seed import --bundled --force-embed               # re-embed all rows
+```
+
+**Python API:**
+
+```python
+report = import_seeds(storage, parsed, mode="update")       # taxonomy on
+report = import_seeds(storage, parsed, mode="replace", scope="category:foo", ...)
+report.taxonomy.ingest.embedded  # count newly embedded this run
+import_seeds(..., skip_taxonomy=True)                       # opt out
+```
+
+**Requires:** `pip install prismguard[prism]` (`prismrag-patch`). `[dev]` extra now includes `[prism]` for tests.
+
+**Tests:** `tests/test_seed_import.py` (auto-taxonomy on update/replace, dry-run skip, opt-out); `tests/test_taxonomy.py`; `tests/test_bundled_seed.py` — **37 passed** as of 2026-07-07.
+
+**Not yet implemented:** `variant_expansion.py` (I.10), graph BFS ingest via prismRAG adapter.
 
 ---
 
