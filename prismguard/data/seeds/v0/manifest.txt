@@ -1,0 +1,3 @@
+# PrismGuard bundled seed v0 — import order (processed top to bottom)
+taxonomy.yaml
+entries.yaml

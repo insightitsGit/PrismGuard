@@ -1,0 +1,47 @@
+# Default triage thresholds and fusion weights (Part I of handoff).
+# Per-category overrides under `categories:`; tuned values land here from T9c calibration.
+
+normalization:
+  max_obfuscation_depth: 3
+
+fusion:
+  w_sim: 0.35
+  w_graph: 0.25
+  w_rule: 0.15
+  w_sev: 0.10
+  w_comm: 0.10
+  w_benign: 0.30
+  w_session: 0.15
+  weak_signal_floor: 0.25
+  min_weak_signals_for_gray: 2
+
+benign_fast_path:
+  benign_allow_floor: 0.72
+  benign_margin_delta: 0.08
+
+triage:
+  block_threshold: 0.78
+  allow_threshold: 0.42
+
+structural:
+  structural_block_threshold: 0.85
+  structural_allow_threshold: 0.20
+
+embedding:
+  chunk_overlap_ratio: 0.25
+  suspicious_ngram_floor: 0.15
+
+routing:
+  community_confidence_floor: 0.55
+
+cache:
+  semantic_cache_threshold: 0.97
+  ttl_seconds: 3600
+
+judge:
+  rate_cap_per_minute: 60
+  tighten_block_threshold_delta: 0.05
+  tighten_weak_signal_floor_delta: 0.10
+  accept_guard_at_lower_confidence_when_capped: true
+
+categories: {}
