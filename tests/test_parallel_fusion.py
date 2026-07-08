@@ -231,3 +231,54 @@ def test_classifier_first_tier1_returns_without_waiting_for_slow_classifier() ->
     assert elapsed_ms < guard._inner.delay_s * 1000 * 0.5  # type: ignore[attr-defined]
     assert result.details.get("classifier_invoked") is True
 
+
+def test_classifier_first_fast_allow_skips_fusion() -> None:
+    @dataclass
+    class CountingEmbedder:
+        inner: HashEmbedder = field(default_factory=HashEmbedder)
+        semantic_calls: int = 0
+
+        @property
+        def semantic_dim(self) -> int:
+            return self.inner.semantic_dim
+
+        @property
+        def category_dim(self) -> int:
+            return self.inner.category_dim
+
+        def embed_semantic(self, text: str) -> list[float]:
+            self.semantic_calls += 1
+            return self.inner.embed_semantic(text)
+
+        def embed_category_base(self, text: str, category_slug: str) -> list[float]:
+            return self.inner.embed_category_base(text, category_slug)
+
+    guard = CountingGuardModel(
+        StubGuardModel(
+            verdict=GuardModelVerdict(decision="allow", confidence=0.1, latency_ms=1.0),
+        )
+    )
+    embedder = CountingEmbedder()
+    from prismguard.seed import load_bundled_seed
+    from prismguard.taxonomy.mapping import build_mapping_from_parsed_seed
+
+    storage = create_storage("memory")
+    engine = build_mapping_from_parsed_seed(load_bundled_seed(profile="authored"))
+    config = TriageConfig(
+        gray_zone_policy="escalate",
+        guard_model=GuardModelConfig(classifier_mode="first"),
+    )
+    checker = RuntimeChecker(
+        storage,
+        engine,
+        embedder=embedder,
+        config=config,
+        guard_model=guard,
+    )
+    embedder.semantic_calls = 0
+    result = checker.check("totally benign unrelated weather question for documentation only")
+    assert result.resolution_gate == "guard_model_fast_allow"
+    assert result.decision == "allow"
+    assert embedder.semantic_calls == 0
+    assert guard.call_count == 1
+

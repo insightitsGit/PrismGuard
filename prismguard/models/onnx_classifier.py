@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -81,8 +82,18 @@ class ONNXPromptInjectionClassifier:
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
+        session_options = ort.SessionOptions()
+        session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        intra_threads = int(os.environ.get("PRISMGUARD_ORT_INTRA_THREADS", "0"))
+        if intra_threads > 0:
+            session_options.intra_op_num_threads = intra_threads
+        inter_threads = int(os.environ.get("PRISMGUARD_ORT_INTER_THREADS", "0"))
+        if inter_threads > 0:
+            session_options.inter_op_num_threads = inter_threads
+
         session = ort.InferenceSession(
             str(onnx_path),
+            session_options,
             providers=["CPUExecutionProvider"],
         )
         tokenizer = Tokenizer.from_file(str(tokenizer_path))

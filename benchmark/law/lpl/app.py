@@ -1,5 +1,9 @@
+from pathlib import Path
+
 from benchmark.law.shared.guards import PrismGuardGate
-from benchmark.law.shared.http_app import main
+from benchmark.law.shared.http_app import create_app, serve_app
+
+app = create_app(stack_id="LPL", framework="langgraph", guard_factory=PrismGuardGate)
 
 if __name__ == "__main__":
-    main("LPL", "langgraph", PrismGuardGate)
+    serve_app(import_target=f"{Path(__file__).stem}:app")

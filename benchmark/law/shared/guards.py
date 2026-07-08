@@ -17,7 +17,12 @@ class GuardGate(Protocol):
 
 def _outcome_from_check_result(result, *, elapsed: float, name: str) -> GuardOutcome:
     classifier_calls = 0
-    if result.resolution_gate in ("guard_model", "guard_model_first", "guard_model_veto"):
+    if result.resolution_gate in (
+        "guard_model",
+        "guard_model_first",
+        "guard_model_fast_allow",
+        "guard_model_veto",
+    ):
         classifier_calls = 1
     elif result.details.get("classifier_fused") or result.details.get("classifier_invoked"):
         classifier_calls = 1
@@ -25,6 +30,8 @@ def _outcome_from_check_result(result, *, elapsed: float, name: str) -> GuardOut
     if result.resolution_gate == "guard_model":
         tier = "classifier_escalation"
     elif result.resolution_gate == "guard_model_first":
+        tier = "classifier_first"
+    elif result.resolution_gate == "guard_model_fast_allow":
         tier = "classifier_first"
     elif result.resolution_gate == "guard_model_veto":
         tier = "classifier_parallel_fusion"

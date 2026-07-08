@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
+from collections import OrderedDict
 from typing import Protocol, runtime_checkable
 
 
@@ -70,10 +72,56 @@ def create_embedder(prefer_transformer: bool = True, *, model_name: str | None =
 
 
 def create_embedder_from_config(cfg) -> Embedder:
-    return create_embedder(
+    embedder = create_embedder(
         prefer_transformer=getattr(cfg.embedding, "prefer_transformer", True),
         model_name=getattr(cfg.embedding, "model_name", None),
     )
+    return maybe_cache_embedder(embedder)
+
+
+class CachedEmbedder:
+    """LRU cache for semantic vectors — keyed by normalized prompt text."""
+
+    def __init__(self, inner: Embedder, *, max_entries: int = 512) -> None:
+        self._inner = inner
+        self._max_entries = max(1, max_entries)
+        self._semantic_cache: OrderedDict[str, list[float]] = OrderedDict()
+        self._category_cache: OrderedDict[str, list[float]] = OrderedDict()
+
+    @property
+    def semantic_dim(self) -> int:
+        return self._inner.semantic_dim
+
+    @property
+    def category_dim(self) -> int:
+        return self._inner.category_dim
+
+    def _remember(self, cache: OrderedDict[str, list[float]], key: str, value: list[float]) -> list[float]:
+        if key in cache:
+            cache.move_to_end(key)
+            return cache[key]
+        cache[key] = value
+        if len(cache) > self._max_entries:
+            cache.popitem(last=False)
+        return value
+
+    def embed_semantic(self, text: str) -> list[float]:
+        return self._remember(self._semantic_cache, text, self._inner.embed_semantic(text))
+
+    def embed_category_base(self, text: str, category_slug: str) -> list[float]:
+        key = f"{category_slug}\0{text}"
+        return self._remember(
+            self._category_cache,
+            key,
+            self._inner.embed_category_base(text, category_slug),
+        )
+
+
+def maybe_cache_embedder(embedder: Embedder) -> Embedder:
+    max_entries = int(os.environ.get("PRISMGUARD_EMBED_CACHE_SIZE", "512"))
+    if max_entries <= 0:
+        return embedder
+    return CachedEmbedder(embedder, max_entries=max_entries)
 
 
 class SentenceTransformerEmbedder:

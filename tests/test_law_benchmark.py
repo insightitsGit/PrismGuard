@@ -125,6 +125,8 @@ def test_cpl_blocks_direct_override() -> None:
     assert body["guard_model_tier"] in (
         "fusion_fast_path",
         "classifier_escalation",
+        "classifier_first",
+        "classifier_parallel_fusion",
         "policy_resolved",
         "fusion_only",
         "generative_judge",

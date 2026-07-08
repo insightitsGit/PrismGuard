@@ -3,50 +3,50 @@
 ## Cost / speed (blended latency first)
 
 ### CPL
-- guard_model_escalation_rate: **0.1005**
+- guard_model_escalation_rate: **0.0899**
 - judge_escalation_rate: **0.0688**
-- blended_latency_ms: **1258.66**
-- fast_path_latency_ms_mean: 1127.57
-- guard_model_latency_ms_mean: 1842.45
-- judge_latency_ms_mean: 1988.67
-- escalated_latency_ms_mean: 1901.85
-- latency_ms_mean (flat): 1258.66
+- blended_latency_ms: **1103.05**
+- fast_path_latency_ms_mean: 976.78
+- guard_model_latency_ms_mean: 1759.12
+- judge_latency_ms_mean: 1789.51
+- escalated_latency_ms_mean: 1772.29
+- latency_ms_mean (flat): 1103.05
 - guard_classifier_calls_mean: 1
 - guard_generative_llm_calls_mean: 0.0688
 
 ### CGL
 - guard_model_escalation_rate: **0.0**
 - judge_escalation_rate: **0.0**
-- blended_latency_ms: **243.54**
-- fast_path_latency_ms_mean: 243.54
+- blended_latency_ms: **189.54**
+- fast_path_latency_ms_mean: 189.54
 - guard_model_latency_ms_mean: None
 - judge_latency_ms_mean: None
 - escalated_latency_ms_mean: None
-- latency_ms_mean (flat): 243.54
+- latency_ms_mean (flat): 189.54
 - guard_classifier_calls_mean: 1
 - guard_generative_llm_calls_mean: 0
 
 ### LGL
 - guard_model_escalation_rate: **0.0**
 - judge_escalation_rate: **0.0**
-- blended_latency_ms: **220.66**
-- fast_path_latency_ms_mean: 220.66
+- blended_latency_ms: **160.41**
+- fast_path_latency_ms_mean: 160.41
 - guard_model_latency_ms_mean: None
 - judge_latency_ms_mean: None
 - escalated_latency_ms_mean: None
-- latency_ms_mean (flat): 220.66
+- latency_ms_mean (flat): 160.41
 - guard_classifier_calls_mean: 1
 - guard_generative_llm_calls_mean: 0
 
 ### LPL
-- guard_model_escalation_rate: **0.1005**
+- guard_model_escalation_rate: **0.0899**
 - judge_escalation_rate: **0.0688**
-- blended_latency_ms: **976.05**
-- fast_path_latency_ms_mean: 840.55
-- guard_model_latency_ms_mean: 1577.88
-- judge_latency_ms_mean: 1732.9
-- escalated_latency_ms_mean: 1640.86
-- latency_ms_mean (flat): 976.05
+- blended_latency_ms: **1010.29**
+- fast_path_latency_ms_mean: 872.84
+- guard_model_latency_ms_mean: 1808.15
+- judge_latency_ms_mean: 1648.09
+- escalated_latency_ms_mean: 1738.79
+- latency_ms_mean (flat): 1010.29
 - guard_classifier_calls_mean: 1
 - guard_generative_llm_calls_mean: 0.0688
 
@@ -109,30 +109,30 @@
 - attack_block_rate_delta: -0.1715
 - normal_scenario_pass_rate_delta: 0.0
 - guard_classifier_calls_mean_delta: 0.0
-- blended_latency_ms_delta: -1015.12
-- guard_model_escalation_rate_delta: -0.1005
+- blended_latency_ms_delta: -913.51
+- guard_model_escalation_rate_delta: -0.0899
 - judge_escalation_rate_delta: -0.0688
-- latency_ms_mean_delta: -1015.12
+- latency_ms_mean_delta: -913.51
 
 ### LPL_vs_LGL
 - holdout_attack_block_rate_delta: -0.2142
 - attack_block_rate_delta: -0.1715
 - normal_scenario_pass_rate_delta: 0.0
 - guard_classifier_calls_mean_delta: 0.0
-- blended_latency_ms_delta: -755.39
-- guard_model_escalation_rate_delta: -0.1005
+- blended_latency_ms_delta: -849.88
+- guard_model_escalation_rate_delta: -0.0899
 - judge_escalation_rate_delta: -0.0688
-- latency_ms_mean_delta: -755.39
+- latency_ms_mean_delta: -849.88
 
 ### CPL_vs_LPL
 - holdout_attack_block_rate_delta: 0.0
 - attack_block_rate_delta: 0.0
 - normal_scenario_pass_rate_delta: 0.0
 - guard_classifier_calls_mean_delta: 0.0
-- blended_latency_ms_delta: -282.61
+- blended_latency_ms_delta: -92.76
 - guard_model_escalation_rate_delta: 0.0
 - judge_escalation_rate_delta: 0.0
-- latency_ms_mean_delta: -282.61
+- latency_ms_mean_delta: -92.76
 
 ## Overlap check
 - holdout_clean: True

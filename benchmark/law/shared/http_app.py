@@ -5,6 +5,7 @@ from typing import Callable
 
 from fastapi import FastAPI
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from benchmark.law.shared.assistant import LawAssistant, run_chorus_pipeline, run_langgraph_pipeline
 from benchmark.law.shared.cases import LawQuery, load_queries
@@ -81,10 +82,11 @@ def create_app(
         return {"status": "ok", "stack": stack_id}
 
     @app.post("/query", response_model=QueryResponse)
-    def query(req: QueryRequest) -> QueryResponse:
+    async def query(req: QueryRequest) -> QueryResponse:
         law_query = _queries().get(req.query_id) if req.query_id else None
         text = law_query.text if law_query and req.traffic_kind == "benign" else req.text
-        result = runner(
+        result = await run_in_threadpool(
+            runner,
             stack_id=stack_id,
             guard=guard,
             assistant=assistant,
@@ -97,8 +99,19 @@ def create_app(
     return app
 
 
-def main(stack_id: str, framework: str, guard_factory: Callable[[], GuardGate]) -> None:
+def serve_app(*, import_target: str) -> None:
+    """Run uvicorn with optional multi-worker (``UVICORN_WORKERS``)."""
     import uvicorn
 
     port = int(os.environ.get("PORT", "8080"))
-    uvicorn.run(create_app(stack_id=stack_id, framework=framework, guard_factory=guard_factory), host="0.0.0.0", port=port)
+    workers = max(1, int(os.environ.get("UVICORN_WORKERS", "1")))
+    uvicorn.run(import_target, host="0.0.0.0", port=port, workers=workers)
+
+
+def main(stack_id: str, framework: str, guard_factory: Callable[[], GuardGate]) -> None:
+    """Legacy entry: single-worker in-process app (used by tests)."""
+    import uvicorn
+
+    port = int(os.environ.get("PORT", "8080"))
+    app = create_app(stack_id=stack_id, framework=framework, guard_factory=guard_factory)
+    uvicorn.run(app, host="0.0.0.0", port=port)

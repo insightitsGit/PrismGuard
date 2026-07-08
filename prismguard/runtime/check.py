@@ -47,6 +47,7 @@ ResolutionGate = Literal[
     "fusion_gray_fail_closed",
     "guard_model",
     "guard_model_first",
+    "guard_model_fast_allow",
     "guard_model_veto",
     "llm_judge",
     "uninitialized",
@@ -147,7 +148,10 @@ class RuntimeChecker:
         self._override_tokens = compile_override_tokens(self._tenant_lexicon)
         self._session_store = session_store or create_session_store()
         self._judge_circuit_open = False
-        self._classifier_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="prismguard-clf")
+        self._classifier_executor = ThreadPoolExecutor(
+            max_workers=max(1, int(os.environ.get("PRISMGUARD_CLASSIFIER_WORKERS", "2"))),
+            thread_name_prefix="prismguard-clf",
+        )
         if guard_model_required_at_init(self._config) and self._guard_model is None:
             raise ValueError(
                 "gray_zone_policy='escalate' requires a configured GuardModel at RuntimeChecker init"
@@ -364,6 +368,24 @@ class RuntimeChecker:
         return CheckResult(
             decision="block",
             resolution_gate="guard_model_first",
+            normalized_prompt="",
+            details=details,
+        )
+
+    def _classifier_fast_allow(self, verdict: GuardModelVerdict) -> CheckResult | None:
+        if verdict.decision != "allow":
+            return None
+        if verdict.confidence >= self._config.guard_model.uncertain_low:
+            return None
+        details = {
+            **self._classifier_details(verdict),
+            "classifier_mode": "first",
+            "decision_source": "classifier_first→fast_allow",
+        }
+        return CheckResult(
+            decision="allow",
+            resolution_gate="guard_model_fast_allow",
+            matched_category="benign_adjacent",
             normalized_prompt="",
             details=details,
         )
@@ -738,6 +760,10 @@ class RuntimeChecker:
             if early is not None:
                 early.normalized_prompt = normalized
                 return early
+            fast_allow = self._classifier_fast_allow(first_verdict)
+            if fast_allow is not None:
+                fast_allow.normalized_prompt = normalized
+                return fast_allow
 
         semantic = self._embedder.embed_semantic(normalized)
         slug = self._engine.assign_category(normalized)
