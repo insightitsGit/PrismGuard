@@ -81,7 +81,7 @@ def run_chorus_pipeline(
             query_id=query.query_id if query else None,
             input_text=text,
             guard=guard_out,
-            latency_ms=(time.perf_counter() - start) * 1000,
+            pipeline_latency_ms=(time.perf_counter() - start) * 1000,
             traffic_kind=traffic_kind,
         )
     if query is None:
@@ -93,7 +93,7 @@ def run_chorus_pipeline(
             input_text=text,
             guard=guard_out,
             answer="",
-            latency_ms=(time.perf_counter() - start) * 1000,
+            pipeline_latency_ms=(time.perf_counter() - start) * 1000,
             traffic_kind=traffic_kind,
         )
     answer, llm_calls = assistant.answer(query)
@@ -107,7 +107,7 @@ def run_chorus_pipeline(
             input_text=text,
             guard=guard_out,
             answer=answer,
-            latency_ms=(time.perf_counter() - start) * 1000,
+            pipeline_latency_ms=(time.perf_counter() - start) * 1000,
             agent_llm_calls=llm_calls,
             traffic_kind=traffic_kind,
         )
@@ -120,7 +120,7 @@ def run_chorus_pipeline(
         guard=guard_out,
         answer=answer,
         task_success=score_law_answer(answer, query),
-        latency_ms=(time.perf_counter() - start) * 1000,
+        pipeline_latency_ms=(time.perf_counter() - start) * 1000,
         agent_llm_calls=llm_calls,
         traffic_kind=traffic_kind,
     )
@@ -175,7 +175,7 @@ def run_langgraph_pipeline(
                 query_id=query.query_id if query else None,
                 input_text=text,
                 guard=guard_out,
-                latency_ms=(time.perf_counter() - start) * 1000,
+                pipeline_latency_ms=(time.perf_counter() - start) * 1000,
                 traffic_kind=traffic_kind,
             )
         answer = final.get("answer", "")
@@ -189,7 +189,7 @@ def run_langgraph_pipeline(
                 input_text=text,
                 guard=guard_out,
                 answer=answer,
-                latency_ms=(time.perf_counter() - start) * 1000,
+                pipeline_latency_ms=(time.perf_counter() - start) * 1000,
                 traffic_kind=traffic_kind,
             )
         return StackResult(
@@ -201,7 +201,7 @@ def run_langgraph_pipeline(
             guard=guard_out,
             answer=answer,
             task_success=score_law_answer(answer, query) if query else False,
-            latency_ms=(time.perf_counter() - start) * 1000,
+            pipeline_latency_ms=(time.perf_counter() - start) * 1000,
             traffic_kind=traffic_kind,
         )
     except ImportError:

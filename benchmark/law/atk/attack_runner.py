@@ -63,6 +63,7 @@ def _post_target(client: httpx.Client, base_url: str, payload: dict) -> dict:
     response.raise_for_status()
     body = response.json()
     body["request_latency_ms"] = (time.perf_counter() - start) * 1000
+    body["latency_ms"] = body["request_latency_ms"]
     return body
 
 

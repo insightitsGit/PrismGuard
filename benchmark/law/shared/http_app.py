@@ -37,6 +37,8 @@ class QueryResponse(BaseModel):
     mapped_category: str | None = None
     answer: str = ""
     task_success: bool = False
+    guard_latency_ms: float = 0.0
+    pipeline_latency_ms: float = 0.0
     latency_ms: float = 0.0
     guard_classifier_calls: int = 0
     guard_generative_llm_calls: int = 0
@@ -47,6 +49,8 @@ class QueryResponse(BaseModel):
 
 
 def _to_response(result: StackResult) -> QueryResponse:
+    pipeline_ms = result.pipeline_latency_ms or result.latency_ms
+    guard_ms = result.guard.latency_ms
     return QueryResponse(
         stack_id=result.stack_id,
         framework=result.framework,
@@ -56,7 +60,9 @@ def _to_response(result: StackResult) -> QueryResponse:
         mapped_category=result.guard.mapped_category,
         answer=result.answer,
         task_success=result.task_success,
-        latency_ms=result.latency_ms,
+        guard_latency_ms=guard_ms,
+        pipeline_latency_ms=pipeline_ms,
+        latency_ms=pipeline_ms,
         guard_classifier_calls=result.guard.guard_classifier_calls,
         guard_generative_llm_calls=result.guard.guard_generative_llm_calls,
         guard_model_tier=result.guard.guard_model_tier,

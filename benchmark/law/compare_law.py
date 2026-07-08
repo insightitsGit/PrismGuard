@@ -25,6 +25,23 @@ ATTACK_SOURCES = (
 )
 
 
+def _client_latency_ms(row: dict[str, Any]) -> float:
+    """Wall-clock latency as experienced by the HTTP client (primary speed metric)."""
+    if row.get("request_latency_ms") is not None:
+        return float(row["request_latency_ms"])
+    return float(row.get("latency_ms") or 0)
+
+
+def _guard_latency_ms(row: dict[str, Any]) -> float:
+    return float(row.get("guard_latency_ms") or 0)
+
+
+def _pipeline_latency_ms(row: dict[str, Any]) -> float:
+    if row.get("pipeline_latency_ms") is not None:
+        return float(row["pipeline_latency_ms"])
+    return float(row.get("latency_ms") or 0)
+
+
 def _escalation_metrics(rows: list[dict[str, Any]]) -> dict[str, float | None]:
     if not rows:
         return {
@@ -42,11 +59,11 @@ def _escalation_metrics(rows: list[dict[str, Any]]) -> dict[str, float | None]:
     n = len(rows)
     guard_rate = len(guard_rows) / n
     judge_rate = len(judge_rows) / n
-    fast_latencies = [float(r.get("latency_ms") or r.get("request_latency_ms") or 0) for r in fast_path]
-    guard_latencies = [float(r.get("latency_ms") or r.get("request_latency_ms") or 0) for r in guard_rows]
-    judge_latencies = [float(r.get("latency_ms") or r.get("request_latency_ms") or 0) for r in judge_rows]
+    fast_latencies = [_client_latency_ms(r) for r in fast_path]
+    guard_latencies = [_client_latency_ms(r) for r in guard_rows]
+    judge_latencies = [_client_latency_ms(r) for r in judge_rows]
     escalated = guard_rows + judge_rows
-    esc_latencies = [float(r.get("latency_ms") or r.get("request_latency_ms") or 0) for r in escalated]
+    esc_latencies = [_client_latency_ms(r) for r in escalated]
     fast_mean = statistics.mean(fast_latencies) if fast_latencies else 0.0
     guard_mean = statistics.mean(guard_latencies) if guard_latencies else 0.0
     judge_mean = statistics.mean(judge_latencies) if judge_latencies else 0.0
@@ -64,19 +81,20 @@ def _escalation_metrics(rows: list[dict[str, Any]]) -> dict[str, float | None]:
     }
 
 
-def _validate_headline_metrics(stacks: dict[str, dict[str, Any]]) -> None:
+def _validate_headline_metrics(stacks: dict[str, dict[str, Any]], *, holdout_source: str) -> None:
     for stack_id, summary in stacks.items():
         if not summary.get("guard_configured", True):
             continue
         by_source = summary.get("attack_block_rate_by_source", {})
-        holdout = by_source.get("legal_overlay_holdout")
+        holdout = by_source.get(holdout_source)
         bundled = by_source.get("bundled_full")
         if holdout is None and bundled is None:
-            seeded = by_source.get("legal_overlay_seeded")
+            seeded_key = next((s for s in by_source if s.endswith("_overlay_seeded") or s == "legal_overlay_seeded"), None)
+            seeded = by_source.get(seeded_key) if seeded_key else None
             if seeded is not None:
                 raise ValueError(
                     f"Stack {stack_id}: holdout/bundled attack metrics missing; "
-                    f"refusing seeded-only headline (legal_overlay_seeded={seeded})"
+                    f"refusing seeded-only headline ({seeded_key}={seeded})"
                 )
 
 
@@ -148,8 +166,10 @@ def _normal_scenarios_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def summarize_stack(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    latencies = [float(r.get("latency_ms") or r.get("request_latency_ms") or 0) for r in rows]
+def summarize_stack(rows: list[dict[str, Any]], *, attack_sources: tuple[str, ...] = ATTACK_SOURCES) -> dict[str, Any]:
+    client_latencies = [_client_latency_ms(r) for r in rows]
+    guard_latencies = [_guard_latency_ms(r) for r in rows]
+    pipeline_latencies = [_pipeline_latency_ms(r) for r in rows]
     classifier_calls = [int(r.get("guard_classifier_calls") or 0) for r in rows]
     generative_calls = [int(r.get("guard_generative_llm_calls") or 0) for r in rows]
     configured = _guard_configured(rows)
@@ -183,12 +203,17 @@ def summarize_stack(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "n": len(rows),
         "guard_configured": configured,
         "guard_model_tier": guard_model_tier,
-        "latency_ms_mean": round(statistics.mean(latencies), 2) if latencies else 0.0,
-        "latency_ms_p95": round(sorted(latencies)[int(0.95 * (len(latencies) - 1))], 2) if latencies else 0.0,
+        "latency_ms_mean": round(statistics.mean(client_latencies), 2) if client_latencies else 0.0,
+        "latency_ms_p95": round(sorted(client_latencies)[int(0.95 * (len(client_latencies) - 1))], 2)
+        if client_latencies
+        else 0.0,
+        "request_latency_ms_mean": round(statistics.mean(client_latencies), 2) if client_latencies else 0.0,
+        "guard_latency_ms_mean": round(statistics.mean(guard_latencies), 2) if guard_latencies else 0.0,
+        "pipeline_latency_ms_mean": round(statistics.mean(pipeline_latencies), 2) if pipeline_latencies else 0.0,
         **escalation,
         "attack_block_rate": _block_rate(rows, configured=configured),
         "attack_block_rate_by_source": {
-            source: _block_rate_for_source(rows, source, configured=configured) for source in ATTACK_SOURCES
+            source: _block_rate_for_source(rows, source, configured=configured) for source in attack_sources
         },
         "false_positive_rate": _rate(len(false_positives), len(benign_rows)),
         "guard_classifier_calls_mean": round(statistics.mean(classifier_calls), 4) if classifier_calls else 0.0,
@@ -221,15 +246,26 @@ def paired_delta(left: dict[str, Any], right: dict[str, Any], metric: str) -> fl
     return round(float(right_val) - float(left_val), 4)
 
 
-def compare_law(results_dir: Path) -> dict[str, Any]:
+def compare_law(results_dir: Path, *, domain: str = "law") -> dict[str, Any]:
+    holdout_source = "legal_overlay_holdout" if domain == "law" else f"{domain}_holdout"
+    seeded_source = "legal_overlay_seeded" if domain == "law" else f"{domain}_overlay_seeded"
+    attack_sources = (
+        seeded_source,
+        holdout_source,
+        "tenant_sim_holdout",
+        "bundled_full",
+    )
     stacks: dict[str, dict[str, Any]] = {}
     for stack in STACK_FILES:
         path = results_dir / f"{stack}.jsonl"
         if path.is_file():
-            stacks[stack.upper()] = summarize_stack(load_jsonl(path))
+            stacks[stack.upper()] = summarize_stack(load_jsonl(path), attack_sources=attack_sources)
 
     overlap = verify_holdout_overlap()
     report: dict[str, Any] = {
+        "domain": domain,
+        "holdout_source": holdout_source,
+        "seeded_source": seeded_source,
         "overlap_check": {
             "holdout_clean": overlap.holdout_clean,
             "holdout_vs_prismguard_seed_collisions": overlap.holdout_vs_prismguard_seed,
@@ -248,7 +284,7 @@ def compare_law(results_dir: Path) -> dict[str, Any]:
         "paired_deltas": {},
         "notes": {
             "value_prop": "fast path for known patterns + rare classifier escalation + auditable lineage",
-            "primary_attack_metric": "attack_block_rate_by_source.legal_overlay_holdout",
+            "primary_attack_metric": f"attack_block_rate_by_source.{holdout_source}",
         },
     }
     for pair in report["pairs"]:
@@ -258,7 +294,7 @@ def compare_law(results_dir: Path) -> dict[str, Any]:
             "holdout_attack_block_rate_delta": paired_delta(
                 left.get("attack_block_rate_by_source", {}),
                 right.get("attack_block_rate_by_source", {}),
-                "legal_overlay_holdout",
+                holdout_source,
             ),
             "attack_block_rate_delta": paired_delta(left, right, "attack_block_rate"),
             "normal_scenario_pass_rate_delta": paired_delta(
@@ -276,11 +312,18 @@ def compare_law(results_dir: Path) -> dict[str, Any]:
 
 
 def write_comparison_report(results_dir: Path, comparison: dict[str, Any]) -> None:
-    _validate_headline_metrics(comparison.get("stacks", {}))
+    domain = comparison.get("domain", "law")
+    holdout_source = comparison.get("holdout_source", "legal_overlay_holdout")
+    seeded_source = comparison.get("seeded_source", "legal_overlay_seeded")
+    _validate_headline_metrics(comparison.get("stacks", {}), holdout_source=holdout_source)
+    title_domain = domain.capitalize()
     lines = [
-        "# Law Guardrail Benchmark — COMPARISON_REPORT (Bug3)",
+        f"# {title_domain} Guardrail Benchmark — COMPARISON_REPORT",
         "",
-        "## Cost / speed (blended latency first)",
+        "## Cost / speed (client request_latency_ms first)",
+        "",
+        "_Primary latency = HTTP client wall clock (`request_latency_ms`). "
+        "Guard-only = `guard_latency_ms`. In-process pipeline = `pipeline_latency_ms`._",
         "",
     ]
     for stack_id, summary in comparison.get("stacks", {}).items():
@@ -289,7 +332,10 @@ def write_comparison_report(results_dir: Path, comparison: dict[str, Any]) -> No
                 f"### {stack_id}",
                 f"- guard_model_escalation_rate: **{summary.get('guard_model_escalation_rate')}**",
                 f"- judge_escalation_rate: **{summary.get('judge_escalation_rate')}**",
-                f"- blended_latency_ms: **{summary.get('blended_latency_ms')}**",
+                f"- request_latency_ms_mean: **{summary.get('request_latency_ms_mean')}**",
+                f"- guard_latency_ms_mean: **{summary.get('guard_latency_ms_mean')}**",
+                f"- pipeline_latency_ms_mean: {summary.get('pipeline_latency_ms_mean')}",
+                f"- blended_latency_ms: **{summary.get('blended_latency_ms')}** (escalation-weighted client latency)",
                 f"- fast_path_latency_ms_mean: {summary.get('fast_path_latency_ms_mean')}",
                 f"- guard_model_latency_ms_mean: {summary.get('guard_model_latency_ms_mean')}",
                 f"- judge_latency_ms_mean: {summary.get('judge_latency_ms_mean')}",
@@ -328,8 +374,8 @@ def write_comparison_report(results_dir: Path, comparison: dict[str, Any]) -> No
             [
                 f"### {stack_id}",
                 f"- guard_configured: {configured}",
-                f"- legal_overlay_holdout: **{by_source.get('legal_overlay_holdout')}**",
-                f"- legal_overlay_seeded: {by_source.get('legal_overlay_seeded')}",
+                f"- {holdout_source}: **{by_source.get(holdout_source)}**",
+                f"- {seeded_source}: {by_source.get(seeded_source)}",
                 f"- bundled_full: {by_source.get('bundled_full')}",
                 f"- guard_classifier_calls_mean: {summary.get('guard_classifier_calls_mean')}",
                 f"- guard_generative_llm_calls_mean: {summary.get('guard_generative_llm_calls_mean')}",

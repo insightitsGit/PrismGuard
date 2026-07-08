@@ -1,6 +1,6 @@
 # PrismGuard — Design Document
 
-Status: draft v0.4 (updated 2026-07-08 — classifier-first default, structural layer, benchmark metrics aligned to code)
+Status: draft v0.5 (updated 2026-07-08 — verified benchmark, client latency instrumentation, reproducibility check, healthcare quarantine)
 Depends on: prismRAG (taxonomy graph retrieval), prismCortex (pgvector seed store), prismLib (in-process cache/runtime)
 Owner note: this document captures the architecture agreed in design discussion; benchmark metrics in Part 12 are measured on the law harness — production traffic targets in Part 1 remain hypotheses.
 
@@ -495,51 +495,68 @@ Factorial design isolates **agent framework** vs **input guardrail**:
 | Normal scenarios | N/A | False-positive stress (pass rate) |
 | Tenant sim holdout | No | Tenant-context eval |
 
-**Runners:** `benchmark/law/run_law_benchmark.py` (Docker), `run_local_benchmark.py` (TestClient), `compare_law.py` → `COMPARISON_REPORT.md`. Additional: `benchmark/domain/run_domain_benchmark.py`, `benchmark/tenant/run_tenant_sim.py`, `fusion_ablation.py`, `run_corpus_scale.py`.
+**Runners:** `benchmark/law/run_local_benchmark.py` (TestClient, authoritative for detection), `benchmark/law/docker-compose.yml` + `atk/attack_runner.py` (HTTP — **must rebuild images before citing**), `compare_law.py` → `COMPARISON_REPORT.md`. Repro check: `scripts/compare_repro_runs.py`.
+
+**Results layout:** see `benchmark/law/results/README.md`. **Authoritative law numbers:** `benchmark/law/results/verified/` only.
 
 **Overlap integrity:** `benchmark/law/shared/seed_overlap.py` verifies holdout prompts do not collide with seeded overlay or bundled corpus.
 
-**Docker:** `benchmark/law/docker-compose.yml` bakes ONNX artifact for CPL/LPL via `prismguard-model train` (`MAX_TRAIN_EXAMPLES` configurable). Set `PRISMGUARD_DOMAIN=law` for domain triage overrides.
+**Docker:** `benchmark/law/docker-compose.yml` bakes ONNX artifact for CPL/LPL via `prismguard-model train` (`MAX_TRAIN_EXAMPLES` configurable). Set `PRISMGUARD_DOMAIN=law` for domain triage overrides. **Stale Docker images produced misleading latency and detection (classifier not on 100% of requests); rebuild before any Docker benchmark.**
 
-### Latest law benchmark (2026-07-08, full 4-stack re-run)
+### Reproducibility (2026-07-08)
 
-| Stack | Holdout block | Normal pass | Blended latency | Judge rate |
-|-------|---------------|-------------|-----------------|------------|
-| **CPL** (PrismGuard) | **85.7%** (12/14) | **100%** (35/35) | ~1,255 ms | ~6.9% |
-| **CGL** (LLM Guard) | 64.3% (9/14) | 100% | ~254 ms | 0% |
-| **LPL** (PrismGuard) | **85.7%** | **100%** | ~1,018 ms | ~6.9% |
-| **LGL** (LLM Guard) | 64.3% | 100% | ~291 ms | 0% |
+Two back-to-back local law runs (`repro-run-a`, `repro-run-b`), same code, bundled-limit 100:
 
-PrismGuard leads on holdout detection with tied normal pass; LLM Guard is ~4–5× faster on blended latency.
+- **Decisions: 100% stable** — 0 decision mismatches, 0 resolution-gate mismatches across all 4 stacks (189 requests each).
+- **Latency: run-to-run variance is high** (timing noise from cold ONNX/embed load, fresh gate init per stack) — **not** decision flapping.
+
+Earlier Docker vs local disagreements were **environment/config mismatch**, not non-deterministic runtime logic.
+
+### Verified law benchmark (2026-07-08 — first numbers worth citing)
+
+Source: `benchmark/law/results/verified/COMPARISON_REPORT.md` (client `request_latency_ms`, harness fix applied).
+
+| Stack | Holdout block | Normal pass | Request latency (mean) | Guard latency (mean) | Judge rate |
+|-------|---------------|-------------|------------------------|----------------------|------------|
+| **CPL** (PrismGuard) | **85.7%** (12/14) | **100%** (35/35) | **1,694 ms** | 1,613 ms | ~6.9% |
+| **CGL** (LLM Guard) | 64.3% (9/14) | 100% | 455 ms | 443 ms | 0% |
+| **LPL** (PrismGuard) | **85.7%** | **100%** | **965 ms** | 920 ms | ~6.9% |
+| **LGL** (LLM Guard) | 64.3% | 100% | 260 ms | 230 ms | 0% |
+
+PrismGuard leads on law holdout detection (+21.4 pp) with tied normal pass. LLM Guard is ~3.7× faster on **client-measured** request latency (CPL vs CGL).
+
+**Do not cite:** `benchmark/law/results/latest/` (pre-fix pipeline latency), Docker `atk_combined.jsonl` without image rebuild, or quarantined healthcare results (see below).
 
 ### Cost / latency reporting
 
-**Blended latency** (`compare_law.py`) estimates typical per-request cost when tiers differ:
+**Primary metric (post-fix):** `request_latency_ms` — HTTP client wall clock (TestClient in-process, `httpx` in Docker atk). This is what a real client experiences.
 
-```
-blended_latency_ms = fast_path_share × fast_path_mean
-                   + guard_model_share × guard_model_mean
-                   + judge_share × judge_mean
-```
+| Field | Meaning |
+|-------|---------|
+| `request_latency_ms` | **Primary** — full HTTP round-trip at the harness client |
+| `guard_latency_ms` | Guard-only (`guard.check()`) |
+| `pipeline_latency_ms` | In-process runner (guard + retrieval on allows) |
+| `latency_ms` | Alias for `request_latency_ms` in jsonl output |
 
-Where `fast_path` = any gate other than `guard_model`, `guard_model_veto`, `llm_judge`.
+**Blended latency** (`compare_law.py`) weights client latency by escalation tier shares (guard_model, llm_judge vs fast path). Useful for tier-mix summary; headline comparison should use `request_latency_ms_mean`.
 
-**Important:** this metric predates classifier-first and can mislead:
+**Important — classifier-first vs escalation metrics:**
 
 - `guard_model_escalation_rate` counts fusion-gray re-escalations, **not** whether the classifier ran — in `classifier_mode: first`, the classifier runs on ~100% of requests regardless.
-- `guard_model_first` (early classifier block) counts as fast path but still paid full ONNX inference.
-- The honest comparison vs LLM Guard is: **always-on base pipeline** (rules + embed + corpus + classifier ≈ 1,000–1,100 ms on CPU Docker) plus a **small judge surcharge** (~7% × ~900 ms), not "classifier escalation."
+- `guard_model_first` (early classifier block) counts as fast path in blended math but still paid full ONNX inference.
+- Fast blocks (`tier1_rule`, `structural`) are sub-millisecond guard time; heavy paths (classifier + embed + fusion) dominate the mean.
 
-**Target reporting (to align with design):**
+### Domain benchmark status
 
-| Metric | Meaning |
-|--------|---------|
-| `base_pipeline_latency_ms` | Mean latency excluding `llm_judge` (always-on stack) |
-| `judge_escalation_rate` | Share hitting generative judge — the only gated expensive tier |
-| `classifier_calls_mean` | Should be ~1.0 for PrismGuard (parity with LLM Guard's one scanner) |
-| `blended_latency_ms` | `base_pipeline + judge_rate × judge_surcharge` (planned metric reframe) |
+| Domain | Overlay/holdout in package | Valid benchmark harness | Status |
+|--------|---------------------------|-------------------------|--------|
+| **Law** | Yes (14 holdout attacks) | Yes (4-stack CPL/CGL/LGL/LPL) | **Verified** |
+| **Healthcare** | Yes (4 holdout — too small) | **No** — mislabeled run quarantined 2026-07-08 | **Not valid** until own KB, normals, holdout ≥14, overlap check |
+| **Finance** | Partial | No | Not started |
 
-See `benchmark/law/results/latest/COMPARISON_REPORT.md` for full paired deltas.
+Quarantined invalid healthcare run: `benchmark/healthcare/results/quarantine-2026-07-08-mislabeled/` — used law traffic + domain flag only; do not cite.
+
+See `benchmark/law/results/verified/COMPARISON_REPORT.md` for full paired deltas.
 
 ---
 
@@ -552,7 +569,7 @@ See `benchmark/law/results/latest/COMPARISON_REPORT.md` for full paired deltas.
 | **Phase 2** | Guard Model tier (owned ONNX classifier) | **Done** — `prism-pi-v1`; classifier-first default + parallel fusion + veto |
 | **Phase 3** | LLM Judge + feedback loop | **Done** — heuristic judge; persistent feedback opt-in |
 | **Phase 4** | Output-side exfil scan | **Done** (library + benchmark wiring) |
-| **Phase 5** | Domain packs + holdout eval | **Done** — law / healthcare / finance |
+| **Phase 5** | Domain packs + holdout eval | **Partial** — law verified; healthcare/finance overlays only (no valid benchmark harness) |
 | **Phase 6** | Tenant context (optional) | **Done** — lexicon, CLI, runtime rules |
 | **Phase 7** | Holdout-safe calibration | **Done** — `prismguard-model calibrate` |
 | **Phase 8** | Law benchmark harness (4 stacks) | **Done** — CPL/CGL/LGL/LPL |
@@ -562,7 +579,7 @@ See `benchmark/law/results/latest/COMPARISON_REPORT.md` for full paired deltas.
 | **Phase 12** | User validation + packaging | **Open** |
 | *(future)* | HTTP classification service (`prismguard serve`) | **Deferred** — not in current scope |
 
-Ongoing: ONNX latency optimization (GPU, async, smaller embedder); full 22k retrain; benchmark metric reframe for base-pipeline vs judge surcharge.
+Ongoing: Docker image rebuild + parity re-run; ONNX latency optimization; full 22k retrain; close 2/14 law holdout misses.
 
 ---
 
@@ -581,7 +598,7 @@ Ongoing: ONNX latency optimization (GPU, async, smaller embedder); full 22k retr
 - Tenant context (opt-in lexicon, Tier-1 + fusion boost)
 - Domain packs with holdout-safe eval sets (law holdout: **85.7% block, 100% normal pass** vs LLM Guard 64.3% / 100%)
 - Output-side scan (benchmark agent path)
-- Law benchmark harness with comparison reports and overlap checks
+- Law benchmark harness with comparison reports, overlap checks, and **client latency instrumentation** (`request_latency_ms`)
 - Embedder: sentence-transformers when available, **HashEmbedder fallback** offline
 
 ### Gaps — production readiness
@@ -599,10 +616,11 @@ Ongoing: ONNX latency optimization (GPU, async, smaller embedder); full 22k retr
 
 | Gap | Impact | Notes |
 |-----|--------|-------|
-| **Base pipeline latency vs LLM Guard** | PrismGuard ~4–5× slower on CPU Docker | Heavier always-on stack: DeBERTa ONNX + sentence-transformer + corpus ANN vs one lightweight scanner; judge is only ~7% of cost |
+| **Client latency vs LLM Guard** | PrismGuard ~3.7× slower on verified client latency (CPL 1,694 ms vs CGL 455 ms) | Heavier always-on stack; tier1/structural blocks are sub-ms but fusion/classifier paths dominate mean |
+| **Docker benchmark parity** | Stale CPL images gave wrong latency and detection | Rebuild CPL/LPL images; re-run atk with `request_latency_ms` before citing Docker numbers |
 | **Holdout not 100%** | 2/14 law holdout attacks still slip through | 85.7% vs LLM Guard 64.3% — ahead but not perfect |
-| **Blended latency metric** | `compare_law.py` treats fusion-gray as "classifier escalation" | Misaligned with classifier-first; reframe to base-pipeline + judge surcharge (see Part 12) |
-| **LLM Judge in benchmarks** | Judge metrics reflect heuristics unless OpenAI configured | `prefer_openai=False` in benchmark guards |
+| **Healthcare domain benchmark** | Mislabeled run quarantined; not product-ready | Needs own KB, normals, holdout ≥14 — do not use domain-flag-on-law-traffic |
+| **LLM Judge in benchmarks** | Judge metrics reflect heuristics unless OpenAI configured | `prefer_openai=False` in benchmark guards; 0 holdout blocks from judge in verified run |
 | **Full corpus retrain** | Docker bake uses stratified sample by default | CLI supports full 22k; `prism-pi-v1` re-exported from HF 22k weights |
 | **Windows pyarrow crash** | Some bundled-seed tests fail on Windows | Environment issue reading parquet corpus |
 
@@ -616,13 +634,16 @@ Ongoing: ONNX latency optimization (GPU, async, smaller embedder); full 22k retr
 
 ### Recommended next work (priority order)
 
-1. **Implement pgvector backend** — unlocks persistent production deploy
-2. **Reframe benchmark latency metrics** — base-pipeline + judge surcharge (Part 12)
-3. **ONNX latency optimization** — GPU inference, async classifier, embedder cache
-4. **Full 22k classifier retrain / v2-law** — reduce structural reliance; close 2/14 holdout misses
-5. **Session fusion** — multi-turn escalation detection with Redis
-6. **Wire output scan into agent SDK helper** — e.g. `RuntimeChecker.scan_response()` (library, not HTTP)
-7. **Align pydantic default** — `classifier_mode: first` in `loader.py` to match shipped yaml
+1. **Docker parity re-run** — rebuild CPL/LPL/CGL/LGL images from current commit; run atk; confirm decisions match `verified/` and `request_latency_ms` is recorded
+2. **Product decision** — legal/compliance wedge (holdout + audit trail) vs pause; do not expand domains until law Docker parity is green
+3. **Latency (law only, measured)** — expand fast-allow/structural share on normal traffic; target client p50 on allows without hurting verified holdout
+4. **Close 2/14 law holdout misses** — `roleplay_jailbreak`, `data_exfiltration_via_output` (no judge dependency — judge added 0 holdout blocks)
+5. **Implement pgvector backend** — unlocks persistent production deploy
+6. **Full 22k classifier retrain / v2-law**
+7. **Session fusion** — multi-turn escalation detection with Redis
+8. **Align pydantic default** — `classifier_mode: first` in `loader.py` to match shipped yaml
+
+**Explicitly deferred until benchmark trust is restored:** new domain packs, tenant sim expansion, architecture changes that add benchmark surface area.
 
 **Explicitly deferred (future, if ever):** a hosted `prismguard serve` HTTP API (`POST /check`, `POST /scan-output`) — not planned for current scope; customers integrate the Python library in-process.
 

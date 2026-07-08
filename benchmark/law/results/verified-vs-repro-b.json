@@ -1,0 +1,39 @@
+{
+  "run_a": "benchmark\\law\\results\\repro-run-b",
+  "run_b": "benchmark\\law\\results\\verified",
+  "stacks": {
+    "CPL": {
+      "n": 189,
+      "decision_mismatches": 0,
+      "gate_mismatches": 0,
+      "latency_abs_delta_mean_ms": 678.95,
+      "latency_abs_delta_p95_ms": 1943.84,
+      "stable": true
+    },
+    "CGL": {
+      "n": 189,
+      "decision_mismatches": 0,
+      "gate_mismatches": 0,
+      "latency_abs_delta_mean_ms": 282.36,
+      "latency_abs_delta_p95_ms": 984.45,
+      "stable": true
+    },
+    "LGL": {
+      "n": 189,
+      "decision_mismatches": 0,
+      "gate_mismatches": 0,
+      "latency_abs_delta_mean_ms": 156.85,
+      "latency_abs_delta_p95_ms": 528.62,
+      "stable": true
+    },
+    "LPL": {
+      "n": 189,
+      "decision_mismatches": 0,
+      "gate_mismatches": 0,
+      "latency_abs_delta_mean_ms": 436.62,
+      "latency_abs_delta_p95_ms": 1319.86,
+      "stable": true
+    }
+  },
+  "decisions_stable": true
+}

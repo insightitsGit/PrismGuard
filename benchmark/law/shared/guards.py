@@ -103,8 +103,15 @@ class PrismGuardGate:
         parsed = load_bundled_seed(profile=seed_profile)
         import_bundled_seed(self._storage, profile=seed_profile)
         if import_legal_overlay:
-            overlay = __import__("pathlib").Path(__file__).resolve().parents[1] / "data" / "legal_attacks.yaml"
-            import_seeds(self._storage, parse_seed_file(overlay), mode="update")
+            from pathlib import Path as _Path
+
+            from prismguard.domains.registry import get_domain_pack
+
+            if domain == "law":
+                overlay_path = _Path(__file__).resolve().parents[1] / "data" / "legal_attacks.yaml"
+            else:
+                overlay_path = get_domain_pack(domain).overlay_path
+            import_seeds(self._storage, parse_seed_file(overlay_path), mode="update")
         self._checker = RuntimeChecker.from_storage(
             self._storage,
             parsed,
