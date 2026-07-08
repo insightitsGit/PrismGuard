@@ -20,7 +20,17 @@ def resolve_artifact_dir(config: GuardModelConfig) -> Path:
     env_path = os.environ.get("PRISMGUARD_GUARD_MODEL_PATH", "").strip()
     if env_path:
         return Path(env_path).expanduser().resolve()
-    return default_artifacts_root() / config.artifact_id
+    candidate = default_artifacts_root() / config.artifact_id
+    if candidate.is_dir() and (candidate / "model.onnx").is_file():
+        return candidate
+    fallback = default_artifacts_root() / "prism-pi-v1"
+    if (
+        config.artifact_id != "prism-pi-v1"
+        and fallback.is_dir()
+        and (fallback / "model.onnx").is_file()
+    ):
+        return fallback
+    return candidate
 
 
 def load_corpus_manifest(artifact_dir: Path) -> dict | None:

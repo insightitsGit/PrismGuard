@@ -68,6 +68,13 @@ def main(argv: list[str] | None = None) -> int:
     calibrate_cmd.add_argument("--domain", default="law", choices=["law", "healthcare", "finance"])
     calibrate_cmd.add_argument("--output", type=Path, default=Path("triage.tuned.yaml"))
 
+    fit_cal_cmd = sub.add_parser("fit-calibration", help="Fit temperature scaling on existing artifact")
+    fit_cal_cmd.add_argument("--base-model", default="")
+    fit_cal_cmd.add_argument("--artifact-id", default="prism-pi-v1")
+    fit_cal_cmd.add_argument("--artifact-path", default="")
+    fit_cal_cmd.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
+    fit_cal_cmd.add_argument("--domain", default="law", choices=["law", "healthcare", "finance"])
+
     args = parser.parse_args(argv)
     if args.command == "export":
         from prismguard.models.export import main as export_main
@@ -193,6 +200,23 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
+
+    if args.command == "fit-calibration":
+        from prismguard.models.fit_calibration import main as fit_cal_main
+
+        fit_argv = [
+            "--artifact-id",
+            args.artifact_id,
+            "--max-length",
+            str(args.max_length),
+            "--domain",
+            args.domain,
+        ]
+        if args.base_model:
+            fit_argv.extend(["--base-model", args.base_model])
+        if args.artifact_path:
+            fit_argv.extend(["--artifact-path", args.artifact_path])
+        return fit_cal_main(fit_argv)
 
     parser.error(f"Unknown command: {args.command}")
     return 2

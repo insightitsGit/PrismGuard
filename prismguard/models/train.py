@@ -102,12 +102,16 @@ def evaluate_holdout_classifier(
     blocked = 0
     for row in attacks:
         prob = _injection_probability(model, tokenizer, device, row["text"], max_length=max_length)
-        if injection_probability_to_decision(prob, uncertain_low, uncertain_high) == "block":
+        if injection_probability_to_decision(
+            prob, uncertain_low=uncertain_low, uncertain_high=uncertain_high
+        ) == "block":
             blocked += 1
     allowed = 0
     for row in normals:
         prob = _injection_probability(model, tokenizer, device, row["text"], max_length=max_length)
-        if injection_probability_to_decision(prob, uncertain_low, uncertain_high) == "allow":
+        if injection_probability_to_decision(
+            prob, uncertain_low=uncertain_low, uncertain_high=uncertain_high
+        ) == "allow":
             allowed += 1
     return {
         "holdout_block_rate": blocked / len(attacks) if attacks else 0.0,

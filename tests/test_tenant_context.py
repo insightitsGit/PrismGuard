@@ -125,6 +125,25 @@ def test_classifier_veto_blocks_allow_path() -> None:
     assert details.get("classifier_veto") is True
 
 
+def test_classifier_veto_requires_confidence_threshold() -> None:
+    cfg = TriageConfig(guard_model=GuardModelConfig(veto_enabled=True, veto_threshold=0.65))
+    from prismguard.seed import load_bundled_seed
+    from prismguard.taxonomy.mapping import build_mapping_from_parsed_seed
+
+    storage = create_storage("memory")
+    parsed = load_bundled_seed(profile="authored")
+    engine = build_mapping_from_parsed_seed(parsed)
+    checker = RuntimeChecker(storage, engine, config=cfg)
+    decision, gate, _ = checker._apply_classifier_veto(
+        "allow",
+        "fusion_allow",
+        GuardModelVerdict(decision="block", confidence=0.60),
+        {},
+    )
+    assert decision == "allow"
+    assert gate == "fusion_allow"
+
+
 def test_tenant_context_runtime_block(tmp_path: Path) -> None:
     from prismguard.seed import load_bundled_seed
     from prismguard.taxonomy.mapping import build_mapping_from_parsed_seed

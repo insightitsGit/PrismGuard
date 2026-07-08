@@ -12,6 +12,7 @@ guard_model:
   uncertain_high: 0.65
   veto_enabled: true
   veto_threshold: 0.65
+  classifier_first_block_threshold: 0.85
 
 tenant_context:
   enabled: false  # opt-in; set true when tenant_lexicon.yaml is provided

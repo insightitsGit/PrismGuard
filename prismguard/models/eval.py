@@ -26,6 +26,8 @@ class ClassifierEvalResult:
     normal_allow_rate: float
     normal_allowed: int
     normal_total: int
+    normal_non_block_rate: float = 0.0
+    normal_non_blocked: int = 0
     corpus_fingerprint: str | None = None
     details: dict[str, Any] | None = None
 
@@ -81,7 +83,14 @@ def evaluate_classifier(
                 "category_slug": row["category_slug"],
             }
         )
-    allowed = sum(1 for row in normals if guard_model.check(row["text"]).decision == "allow")
+    allowed = 0
+    non_blocked = 0
+    for row in normals:
+        verdict = guard_model.check(row["text"])
+        if verdict.decision == "allow":
+            allowed += 1
+        if verdict.decision != "block":
+            non_blocked += 1
     fingerprint = None
     if artifact_dir is not None:
         manifest = load_corpus_manifest(artifact_dir)
@@ -96,6 +105,8 @@ def evaluate_classifier(
         normal_allow_rate=round(allowed / len(normals), 4) if normals else 1.0,
         normal_allowed=allowed,
         normal_total=len(normals),
+        normal_non_block_rate=round(non_blocked / len(normals), 4) if normals else 1.0,
+        normal_non_blocked=non_blocked,
         corpus_fingerprint=fingerprint,
         details={"holdout_rows": per_attack},
     )
@@ -146,7 +157,9 @@ def main(argv: list[str] | None = None) -> int:
             f"holdout_block={result.holdout_blocked}/{result.holdout_total} "
             f"({result.holdout_block_rate:.1%}) "
             f"normal_allow={result.normal_allowed}/{result.normal_total} "
-            f"({result.normal_allow_rate:.1%})"
+            f"({result.normal_allow_rate:.1%}) "
+            f"normal_non_block={result.normal_non_blocked}/{result.normal_total} "
+            f"({result.normal_non_block_rate:.1%})"
         )
     return 0
 

@@ -80,7 +80,7 @@ class PrismGuardGate:
         llm_judge = None
         if gray_zone_policy == "escalate":
             if enable_guard_model:
-                guard_model = create_guard_model()
+                guard_model = create_guard_model(config.guard_model)
             if guard_model is None:
                 config = config.model_copy(update={"gray_zone_policy": "fail_closed"})
             elif enable_llm_judge:

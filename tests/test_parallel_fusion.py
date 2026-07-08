@@ -156,11 +156,39 @@ def test_classifier_first_blocks_high_confidence_before_tier1() -> None:
     )
     checker = _checker_parallel()
     checker._config = checker._config.model_copy(  # noqa: SLF001
-        update={"guard_model": checker._config.guard_model.model_copy(update={"classifier_mode": "first"})}
+        update={
+            "guard_model": checker._config.guard_model.model_copy(
+                update={"classifier_mode": "first", "classifier_first_block_threshold": 0.85}
+            )
+        }
     )
     checker._guard_model = guard  # noqa: SLF001
     result = checker.check("totally benign unrelated weather question for documentation only")
     assert result.resolution_gate == "guard_model_first"
     assert result.decision == "block"
+    assert guard.call_count == 1
+
+
+def test_classifier_first_medium_confidence_does_not_short_circuit() -> None:
+    guard = CountingGuardModel(
+        StubGuardModel(
+            verdict=GuardModelVerdict(decision="block", confidence=0.72, latency_ms=1.0),
+        )
+    )
+    checker = _checker_parallel()
+    checker._config = checker._config.model_copy(  # noqa: SLF001
+        update={
+            "guard_model": checker._config.guard_model.model_copy(
+                update={
+                    "classifier_mode": "first",
+                    "classifier_first_block_threshold": 0.88,
+                    "veto_threshold": 0.82,
+                }
+            )
+        }
+    )
+    checker._guard_model = guard  # noqa: SLF001
+    result = checker.check("totally benign unrelated weather question for documentation only")
+    assert result.resolution_gate != "guard_model_first"
     assert guard.call_count == 1
 

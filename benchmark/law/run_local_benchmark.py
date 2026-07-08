@@ -23,6 +23,9 @@ STACKS = [
 
 
 def run_local(*, output_dir: Path, bundled_limit: int) -> dict:
+    import os
+
+    os.environ.setdefault("PRISMGUARD_DOMAIN", "law")
     output_dir.mkdir(parents=True, exist_ok=True)
     traffic = build_traffic_rows(
         bundled_profile="full",

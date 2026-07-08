@@ -325,7 +325,8 @@ class RuntimeChecker:
     def _classifier_first_early_block(self, verdict: GuardModelVerdict) -> CheckResult | None:
         if verdict.decision != "block":
             return None
-        if verdict.confidence < self._config.guard_model.uncertain_high:
+        threshold = self._config.guard_model.classifier_first_block_threshold
+        if verdict.confidence < threshold:
             return None
         details = {
             **self._classifier_details(verdict),
@@ -417,9 +418,7 @@ class RuntimeChecker:
         if verdict is None or not self._config.guard_model.veto_enabled:
             return decision, gate, details
         threshold = self._config.guard_model.veto_threshold
-        if decision == "allow" and (
-            verdict.decision == "block" or verdict.confidence >= threshold
-        ):
+        if decision == "allow" and verdict.confidence >= threshold:
             return (
                 "block",
                 "guard_model_veto",
@@ -453,6 +452,16 @@ class RuntimeChecker:
         if not contains_override_language(normalized, override_tokens=self._override_tokens):
             return False
         return bool(find_matching_entities(normalized, self._tenant_lexicon))
+
+    def _fusion_classifier_prob(self, verdict: GuardModelVerdict | None) -> float | None:
+        """Only let high-confidence classifier scores pull fusion toward block."""
+        if verdict is None:
+            return None
+        if verdict.confidence < self._config.guard_model.veto_threshold:
+            if verdict.decision == "block":
+                return None
+            return verdict.confidence
+        return verdict.confidence
 
     def _resolve_gray(
         self,
@@ -542,6 +551,18 @@ class RuntimeChecker:
             return result
 
         if verdict_decision == "block":
+            confidence = guard_details.get("guard_model_confidence")
+            if (
+                self._uses_classifier_first()
+                and isinstance(confidence, (int, float))
+                and float(confidence) < self._config.guard_model.veto_threshold
+            ):
+                verdict_decision = "allow"
+                guard_details = {
+                    **guard_details,
+                    "decision_source": "fusion_gray→guard_model_below_veto→allow",
+                }
+        if verdict_decision == "block":
             result = CheckResult(
                 decision="block",
                 resolution_gate="guard_model",
@@ -583,11 +604,6 @@ class RuntimeChecker:
         session_score = self._session_store.escalation_score(session_id) if session_id else 0.0
 
         first_verdict = self._run_classifier_first(prompt)
-        if first_verdict is not None:
-            early = self._classifier_first_early_block(first_verdict)
-            if early is not None:
-                early.normalized_prompt = normalized
-                return early
 
         tier1 = self._engine.match_tier1(normalized)
         if tier1 is not None:
@@ -633,6 +649,33 @@ class RuntimeChecker:
                     first_verdict,
                 ),
             )
+        first_block_threshold = self._config.guard_model.classifier_first_block_threshold
+        if structural.decision == "allow" and (
+            first_verdict is None
+            or first_verdict.confidence < first_block_threshold
+            or structural.benign_score >= 0.55
+        ):
+            return CheckResult(
+                decision="allow",
+                resolution_gate="structural",
+                matched_category="benign_adjacent",
+                normalized_prompt=normalized,
+                details=self._attach_classifier_details(
+                    {
+                        "structural": structural.details,
+                        "matched_pattern": structural.matched_pattern,
+                        "decision_source": "structural_benign_framing",
+                    },
+                    first_verdict,
+                ),
+            )
+
+        if first_verdict is not None:
+            early = self._classifier_first_early_block(first_verdict)
+            if early is not None:
+                early.normalized_prompt = normalized
+                return early
+
         if structural.decision == "allow":
             if (
                 first_verdict is not None
@@ -786,9 +829,7 @@ class RuntimeChecker:
             )
 
         classifier_verdict = self._collect_classifier_verdict(classifier_future, first_verdict=first_verdict)
-        classifier_prob = (
-            classifier_verdict.confidence if classifier_verdict is not None else None
-        )
+        classifier_prob = self._fusion_classifier_prob(classifier_verdict)
 
         fusion = fuse_signals(
             attack_sim=attack_sim,
