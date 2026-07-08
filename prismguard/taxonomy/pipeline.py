@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from prismguard.storage.protocols import StorageBackend
-from prismguard.taxonomy.embedder import Embedder, create_embedder
+from prismguard.taxonomy.embedder import Embedder, create_embedder_from_config
 from prismguard.taxonomy.ingest import IngestReport, ingest_seed_vectors
 from prismguard.taxonomy.mapping import TaxonomyEngine, build_mapping_after_import
 from prismguard.taxonomy.report import CoverageReport, build_coverage_report, estimate_llm_reduction
@@ -30,8 +30,10 @@ def run_post_seed_pipeline(
     embedder: Embedder | None = None,
 ) -> PostSeedReport:
     """Run prismRAG taxonomy wiring + dual-vector ingest immediately after seed import."""
+    from prismguard.config.loader import load_triage_config
+
     engine = build_mapping_after_import(storage, parsed)
-    emb = embedder or create_embedder(prefer_transformer=False)
+    emb = embedder or create_embedder_from_config(load_triage_config())
     ingest_report = ingest_seed_vectors(storage, engine, emb, force=force_embed)
     coverage = build_coverage_report(storage, parsed, engine)
     reduction = estimate_llm_reduction(coverage)

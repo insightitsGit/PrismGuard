@@ -1,0 +1,14 @@
+{
+  "authored_baseline": {
+    "holdout": 0.5,
+    "normal_pass": 1.0
+  },
+  "cpl_authored": {
+    "holdout_block_rate": 0.0714,
+    "normal_pass_rate": 0.5429
+  },
+  "cpl_full": {
+    "holdout_block_rate": 0.0714,
+    "normal_pass_rate": 0.5429
+  }
+}

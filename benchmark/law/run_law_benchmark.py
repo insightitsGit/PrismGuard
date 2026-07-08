@@ -12,7 +12,7 @@ from benchmark.law.compare_law import compare_law, write_comparison_report
 TARGETS = {
     "CPL": "http://localhost:8010",
     "CGL": "http://localhost:8011",
-    "LFL": "http://localhost:8012",
+    "LGL": "http://localhost:8012",
     "LPL": "http://localhost:8013",
 }
 

@@ -17,20 +17,24 @@ class GuardGate(Protocol):
 
 def _outcome_from_check_result(result, *, elapsed: float, name: str) -> GuardOutcome:
     classifier_calls = 0
-    if result.resolution_gate == "guard_model":
+    if result.resolution_gate in ("guard_model", "guard_model_first", "guard_model_veto"):
         classifier_calls = 1
     elif result.details.get("classifier_fused"):
         classifier_calls = 1
     generative_calls = 1 if result.resolution_gate == "llm_judge" else 0
     if result.resolution_gate == "guard_model":
         tier = "classifier_escalation"
+    elif result.resolution_gate == "guard_model_first":
+        tier = "classifier_first"
+    elif result.resolution_gate == "guard_model_veto":
+        tier = "classifier_parallel_fusion"
     elif result.resolution_gate == "llm_judge":
         tier = "generative_judge"
     elif result.details.get("classifier_fused"):
         tier = "classifier_parallel_fusion"
     elif result.resolution_gate in ("fusion_gray_fail_closed", "fusion_gray_fail_open"):
         tier = "policy_resolved"
-    elif result.resolution_gate in ("tier1_rule", "corpus_match", "fusion_block", "fusion_allow", "benign_fast_path"):
+    elif result.resolution_gate in ("tier1_rule", "tenant_context_rule", "corpus_match", "fusion_block", "fusion_allow", "benign_fast_path"):
         tier = "fusion_fast_path"
     else:
         tier = "fusion_only"
@@ -67,10 +71,11 @@ class PrismGuardGate:
         from prismguard.seed import import_bundled_seed, import_seeds, load_bundled_seed
         from prismguard.seed.parse import parse_seed_file
         from prismguard.storage import create_storage
-        from prismguard.taxonomy.embedder import HashEmbedder
+        from prismguard.taxonomy.embedder import create_embedder_from_config
 
-        config = load_triage_config().model_copy(update={"gray_zone_policy": gray_zone_policy})
-        embedder = HashEmbedder()
+        domain = __import__("os").environ.get("PRISMGUARD_DOMAIN", "law")
+        config = load_triage_config(domain=domain).model_copy(update={"gray_zone_policy": gray_zone_policy})
+        embedder = create_embedder_from_config(config)
         guard_model = None
         llm_judge = None
         if gray_zone_policy == "escalate":
@@ -183,67 +188,3 @@ class LLMGuardGate:
             mapped_category="direct_instruction_override" if not is_valid else "benign_adjacent",
             details={"is_valid": is_valid, "risk_score": risk_score, "sanitized_len": len(sanitized or "")},
         )
-
-
-class LlamaFirewallGate:
-    name = "llamafirewall"
-
-    def __init__(self) -> None:
-        self._firewall = None
-        self._init_error = "llamafirewall not installed"
-        try:
-            from llamafirewall import LlamaFirewall, Role, ScannerType
-
-            self._firewall = LlamaFirewall(scanners={Role.USER: [ScannerType.PROMPT_GUARD]})
-            self._init_error = ""
-        except Exception as exc:  # pragma: no cover - optional heavy dep
-            self._init_error = str(exc)
-
-    def check(self, text: str) -> GuardOutcome:
-        start = time.perf_counter()
-        if self._firewall is None:
-            return GuardOutcome(
-                decision="gray",
-                resolution_gate="llamafirewall_unconfigured",
-                guardrail=self.name,
-                guard_classifier_calls=0,
-                guard_generative_llm_calls=0,
-                guard_model_tier="unconfigured",
-                latency_ms=(time.perf_counter() - start) * 1000,
-                details={"error": self._init_error},
-            )
-        try:
-            from llamafirewall import ScanDecision, UserMessage
-
-            result = self._firewall.scan(UserMessage(content=text))
-            blocked = result.decision in (
-                ScanDecision.BLOCK,
-                ScanDecision.HUMAN_IN_THE_LOOP_REQUIRED,
-            )
-            elapsed = (time.perf_counter() - start) * 1000
-            return GuardOutcome(
-                decision="block" if blocked else "allow",
-                resolution_gate="llamafirewall_prompt_guard",
-                guardrail=self.name,
-                guard_classifier_calls=1,
-                guard_generative_llm_calls=0,
-                guard_model_tier="classifier",
-                latency_ms=elapsed,
-                mapped_category="direct_instruction_override" if blocked else "benign_adjacent",
-                details={
-                    "scan_decision": str(result.decision),
-                    "reason": getattr(result, "reason", None),
-                    "score": getattr(result, "score", None),
-                },
-            )
-        except Exception as exc:
-            return GuardOutcome(
-                decision="gray",
-                resolution_gate="llamafirewall_error",
-                guardrail=self.name,
-                guard_classifier_calls=0,
-                guard_generative_llm_calls=0,
-                guard_model_tier="unconfigured",
-                latency_ms=(time.perf_counter() - start) * 1000,
-                details={"error": str(exc)},
-            )

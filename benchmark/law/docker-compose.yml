@@ -6,6 +6,7 @@ services:
       args:
         STACK: cpl
         EXTRAS: prism,seed,benchmark-law,guard-model
+        MAX_TRAIN_EXAMPLES: ${MAX_TRAIN_EXAMPLES:-0}
     ports:
       - "8010:8080"
     environment:
@@ -25,20 +26,18 @@ services:
       PORT: "8080"
       TOKENIZERS_PARALLELISM: "false"
 
-  lfl:
+  lgl:
     build:
       context: ../..
       dockerfile: benchmark/law/Dockerfile.stack
       args:
-        STACK: lfl
-        EXTRAS: prism,seed,benchmark-law,llamafirewall
+        STACK: lgl
+        EXTRAS: prism,seed,benchmark-law,llm-guard
     ports:
       - "8012:8080"
     environment:
       PORT: "8080"
       TOKENIZERS_PARALLELISM: "false"
-      HF_TOKEN: ${HF_TOKEN:-}
-      HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN:-}
 
   lpl:
     build:
@@ -47,6 +46,7 @@ services:
       args:
         STACK: lpl
         EXTRAS: prism,seed,benchmark-law,guard-model
+        MAX_TRAIN_EXAMPLES: ${MAX_TRAIN_EXAMPLES:-0}
     ports:
       - "8013:8080"
     environment:
@@ -60,12 +60,12 @@ services:
     depends_on:
       - cpl
       - cgl
-      - lfl
+      - lgl
       - lpl
     environment:
       TARGET_CPL: http://cpl:8080
       TARGET_CGL: http://cgl:8080
-      TARGET_LFL: http://lfl:8080
+      TARGET_LGL: http://lgl:8080
       TARGET_LPL: http://lpl:8080
     volumes:
       - ./results/latest:/results

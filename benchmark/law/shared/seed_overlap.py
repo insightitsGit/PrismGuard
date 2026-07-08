@@ -54,12 +54,26 @@ def holdout_attack_texts() -> set[str]:
 class OverlapReport:
     holdout_vs_prismguard_seed: list[str]
     holdout_vs_seeded_overlay: list[str]
+    holdout_vs_bundled_full: list[str]
+    holdout_vs_tenant_sim: list[str]
     bundled_full_vs_authored_count: int
     bundled_full_minus_authored_count: int
 
     @property
     def holdout_clean(self) -> bool:
-        return not self.holdout_vs_prismguard_seed and not self.holdout_vs_seeded_overlay
+        return (
+            not self.holdout_vs_prismguard_seed
+            and not self.holdout_vs_seeded_overlay
+            and not self.holdout_vs_bundled_full
+            and not self.holdout_vs_tenant_sim
+        )
+
+
+def tenant_sim_attack_texts() -> set[str]:
+    path = Path(__file__).resolve().parents[2] / "tenant" / "data" / "tenant_sim_attacks.yaml"
+    if not path.is_file():
+        return set()
+    return _texts_from_yaml(path)
 
 
 def verify_holdout_overlap() -> OverlapReport:
@@ -68,9 +82,12 @@ def verify_holdout_overlap() -> OverlapReport:
     seeded_overlay = _texts_from_yaml(_SEEDED_OVERLAY)
     full = bundled_full_texts()
     authored = {_normalize(entry.canonical_text()) for entry in load_bundled_seed(profile="authored").entries}
+    tenant_sim = tenant_sim_attack_texts()
     return OverlapReport(
         holdout_vs_prismguard_seed=sorted(holdout & seeded),
         holdout_vs_seeded_overlay=sorted(holdout & seeded_overlay),
+        holdout_vs_bundled_full=sorted(holdout & full),
+        holdout_vs_tenant_sim=sorted(holdout & tenant_sim),
         bundled_full_vs_authored_count=len(full & authored),
         bundled_full_minus_authored_count=len(full - authored),
     )

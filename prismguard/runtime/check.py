@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -7,13 +8,24 @@ from enum import Enum
 from typing import TYPE_CHECKING, Literal
 
 from prismguard.config.loader import TriageConfig, load_triage_config
+from prismguard.context.matcher import (
+    compile_override_tokens,
+    contains_override_language,
+    find_matching_entities,
+    tenant_severity_boost,
+    tenant_tier1_block,
+)
+from prismguard.context.models import TenantLexicon
+from prismguard.context.loader import load_lexicon_file, load_tenant_lexicon
 from prismguard.runtime.fusion import fuse_signals
 from prismguard.runtime.guard_model import GuardModel, GuardModelVerdict
 from prismguard.runtime.llm_judge import LLMJudge
 from prismguard.runtime.normalize import normalize_prompt
+from prismguard.runtime.session import SessionStore, create_session_store
+from prismguard.runtime.structural import analyze_structural
 from prismguard.runtime.thresholds import resolve_thresholds
 from prismguard.storage.protocols import StorageBackend
-from prismguard.taxonomy.embedder import Embedder, create_embedder
+from prismguard.taxonomy.embedder import Embedder, create_embedder_from_config
 
 if TYPE_CHECKING:
     from prismguard.feedback.review import FeedbackReviewService
@@ -24,6 +36,8 @@ from prismguard.taxonomy.mapping import TaxonomyEngine, build_mapping_from_parse
 Decision = Literal["block", "allow", "gray"]
 ResolutionGate = Literal[
     "tier1_rule",
+    "tenant_context_rule",
+    "structural",
     "corpus_match",
     "benign_fast_path",
     "fusion_block",
@@ -32,6 +46,8 @@ ResolutionGate = Literal[
     "fusion_gray_fail_open",
     "fusion_gray_fail_closed",
     "guard_model",
+    "guard_model_first",
+    "guard_model_veto",
     "llm_judge",
     "uninitialized",
 ]
@@ -79,12 +95,26 @@ def guard_model_required(config: TriageConfig) -> bool:
     """True when runtime should attempt to load/use a Guard Model."""
     if not config.guard_model.enabled:
         return False
-    return config.guard_model.classifier_mode == "parallel" or config.gray_zone_policy == "escalate"
+    return (
+        config.guard_model.classifier_mode in ("parallel", "first")
+        or config.gray_zone_policy == "escalate"
+    )
 
 
 def guard_model_required_at_init(config: TriageConfig) -> bool:
     """Strict init check — escalate policy must have a model; parallel degrades if missing."""
     return config.guard_model.enabled and config.gray_zone_policy == "escalate"
+
+
+def _resolve_tenant_lexicon(config: TriageConfig) -> TenantLexicon | None:
+    if not config.tenant_context.enabled:
+        return None
+    path = config.tenant_context.lexicon_path.strip() or os.environ.get(
+        "PRISMGUARD_TENANT_LEXICON_PATH", ""
+    ).strip()
+    if path:
+        return load_lexicon_file(path)
+    return load_tenant_lexicon()
 
 
 class RuntimeChecker:
@@ -103,14 +133,19 @@ class RuntimeChecker:
         guard_model: GuardModel | None = None,
         llm_judge: LLMJudge | None = None,
         feedback_review: FeedbackReviewService | None = None,
+        tenant_lexicon: TenantLexicon | None = None,
+        session_store: SessionStore | None = None,
     ) -> None:
         self._storage = storage
         self._engine = engine
-        self._embedder = embedder or create_embedder(prefer_transformer=False)
         self._config = config or load_triage_config()
+        self._embedder = embedder or create_embedder_from_config(self._config)
         self._guard_model = guard_model
         self._llm_judge = llm_judge
         self._feedback_review = feedback_review
+        self._tenant_lexicon = tenant_lexicon or _resolve_tenant_lexicon(self._config)
+        self._override_tokens = compile_override_tokens(self._tenant_lexicon)
+        self._session_store = session_store or create_session_store()
         self._judge_circuit_open = False
         self._classifier_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="prismguard-clf")
         if guard_model_required_at_init(self._config) and self._guard_model is None:
@@ -141,9 +176,10 @@ class RuntimeChecker:
         guard_model: GuardModel | None = None,
         llm_judge: LLMJudge | None = None,
         feedback_review: FeedbackReviewService | None = None,
+        tenant_lexicon: TenantLexicon | None = None,
     ) -> RuntimeChecker:
         engine = build_mapping_from_parsed_seed(parsed_seed)
-        emb = embedder or create_embedder(prefer_transformer=False)
+        emb = embedder or create_embedder_from_config(config)
         from prismguard.taxonomy.constants import CATEGORY_VECTOR_DIM
 
         needs_embed = force_embed or any(
@@ -163,7 +199,7 @@ class RuntimeChecker:
             guard_model = create_guard_model(config.guard_model)
         if guard_model is None and config.gray_zone_policy == "escalate":
             config = config.model_copy(update={"gray_zone_policy": "fail_closed"})
-        if guard_model is None and config.guard_model.classifier_mode == "parallel":
+        if guard_model is None and config.guard_model.classifier_mode in ("parallel", "first"):
             config = config.model_copy(update={"guard_model": config.guard_model.model_copy(update={"classifier_mode": "gray_only"})})
         return cls(
             storage,
@@ -173,6 +209,7 @@ class RuntimeChecker:
             guard_model=guard_model,
             llm_judge=llm_judge,
             feedback_review=feedback_review,
+            tenant_lexicon=tenant_lexicon,
         )
 
     def _record_feedback(self, *, prompt: str, result: CheckResult, origin: str) -> None:
@@ -273,6 +310,59 @@ class RuntimeChecker:
             return 1.0
         return 0.5 if category_slug else 0.0
 
+    def _uses_classifier_first(self) -> bool:
+        return (
+            self._config.guard_model.enabled
+            and self._config.guard_model.classifier_mode == "first"
+            and self._guard_model is not None
+        )
+
+    def _run_classifier_first(self, prompt: str) -> GuardModelVerdict | None:
+        if not self._uses_classifier_first():
+            return None
+        return self._guard_model.check(prompt)  # type: ignore[union-attr]
+
+    def _classifier_first_early_block(self, verdict: GuardModelVerdict) -> CheckResult | None:
+        if verdict.decision != "block":
+            return None
+        if verdict.confidence < self._config.guard_model.uncertain_high:
+            return None
+        details = {
+            **self._classifier_details(verdict),
+            "classifier_mode": "first",
+            "decision_source": "classifier_first→block",
+        }
+        return CheckResult(
+            decision="block",
+            resolution_gate="guard_model_first",
+            normalized_prompt="",
+            details=details,
+        )
+
+    def _attach_classifier_details(self, details: dict, verdict: GuardModelVerdict | None) -> dict:
+        if verdict is None:
+            return details
+        mode = "first" if self._uses_classifier_first() else "parallel"
+        return {**details, **self._classifier_details(verdict), "classifier_mode": mode}
+
+    def _escalate_uncertain_classifier(
+        self,
+        *,
+        prompt: str,
+        normalized: str,
+        fusion_details: dict,
+        matched_category: str | None,
+        classifier_verdict: GuardModelVerdict,
+    ) -> CheckResult:
+        details = self._attach_classifier_details(fusion_details, classifier_verdict)
+        details["decision_source"] = "classifier_first→uncertain→gray"
+        return self._resolve_gray(
+            prompt=prompt,
+            normalized=normalized,
+            fusion_details=details,
+            matched_category=matched_category,
+        )
+
     def _uses_parallel_classifier(self) -> bool:
         return (
             self._config.guard_model.enabled
@@ -280,7 +370,14 @@ class RuntimeChecker:
             and self._guard_model is not None
         )
 
-    def _start_parallel_classifier(self, prompt: str) -> Future[GuardModelVerdict] | None:
+    def _start_parallel_classifier(
+        self,
+        prompt: str,
+        *,
+        first_verdict: GuardModelVerdict | None = None,
+    ) -> Future[GuardModelVerdict] | None:
+        if first_verdict is not None:
+            return None
         if not self._uses_parallel_classifier():
             return None
         return self._classifier_executor.submit(self._guard_model.check, prompt)  # type: ignore[union-attr]
@@ -288,7 +385,11 @@ class RuntimeChecker:
     def _collect_classifier_verdict(
         self,
         future: Future[GuardModelVerdict] | None,
+        *,
+        first_verdict: GuardModelVerdict | None = None,
     ) -> GuardModelVerdict | None:
+        if first_verdict is not None:
+            return first_verdict
         if future is None:
             return None
         return future.result()
@@ -305,6 +406,53 @@ class RuntimeChecker:
             "guard_model_details": verdict.details,
             "classifier_prob": verdict.confidence,
         }
+
+    def _apply_classifier_veto(
+        self,
+        decision: Decision,
+        gate: ResolutionGate,
+        verdict: GuardModelVerdict | None,
+        details: dict,
+    ) -> tuple[Decision, ResolutionGate, dict]:
+        if verdict is None or not self._config.guard_model.veto_enabled:
+            return decision, gate, details
+        threshold = self._config.guard_model.veto_threshold
+        if decision == "allow" and (
+            verdict.decision == "block" or verdict.confidence >= threshold
+        ):
+            return (
+                "block",
+                "guard_model_veto",
+                {
+                    **details,
+                    "classifier_veto": True,
+                    "veto_confidence": verdict.confidence,
+                    "decision_source": "classifier_veto",
+                },
+            )
+        return decision, gate, details
+
+    def _tenant_override_escalation(
+        self,
+        normalized: str,
+        classifier_verdict: GuardModelVerdict | None,
+    ) -> bool:
+        if self._tenant_lexicon is None or not self._config.tenant_context.force_classifier_on_override:
+            return False
+        if not contains_override_language(normalized, override_tokens=self._override_tokens):
+            return False
+        if not find_matching_entities(normalized, self._tenant_lexicon):
+            return False
+        if classifier_verdict is None:
+            return True
+        return classifier_verdict.decision == "uncertain"
+
+    def _skip_benign_fast_path(self, normalized: str) -> bool:
+        if self._tenant_lexicon is None:
+            return False
+        if not contains_override_language(normalized, override_tokens=self._override_tokens):
+            return False
+        return bool(find_matching_entities(normalized, self._tenant_lexicon))
 
     def _resolve_gray(
         self,
@@ -415,10 +563,31 @@ class RuntimeChecker:
         return result
 
     def check(self, prompt: str, *, session_id: str | None = None) -> CheckResult:
+        result = self._check_body(prompt, session_id=session_id)
+        if session_id:
+            self._session_store.record_turn(
+                session_id,
+                prompt=prompt,
+                normalized=result.normalized_prompt,
+                category_slug=result.matched_category,
+                attack_sim=result.attack_sim,
+                decision=result.decision,
+            )
+        return result
+
+    def _check_body(self, prompt: str, *, session_id: str | None = None) -> CheckResult:
         normalized = normalize_prompt(
             prompt,
             max_obfuscation_depth=self._config.normalization.max_obfuscation_depth,
         )
+        session_score = self._session_store.escalation_score(session_id) if session_id else 0.0
+
+        first_verdict = self._run_classifier_first(prompt)
+        if first_verdict is not None:
+            early = self._classifier_first_early_block(first_verdict)
+            if early is not None:
+                early.normalized_prompt = normalized
+                return early
 
         tier1 = self._engine.match_tier1(normalized)
         if tier1 is not None:
@@ -428,10 +597,82 @@ class RuntimeChecker:
                 matched_category=tier1.category_slug,
                 matched_rule_id=tier1.rule_id,
                 normalized_prompt=normalized,
-                details={"severity": tier1.severity},
+                details=self._attach_classifier_details(
+                    {"severity": tier1.severity},
+                    first_verdict,
+                ),
             )
 
-        classifier_future = self._start_parallel_classifier(prompt)
+        tenant_block = tenant_tier1_block(
+            normalized,
+            self._tenant_lexicon,
+            override_tokens=self._override_tokens,
+        )
+        if tenant_block is not None:
+            return CheckResult(
+                decision="block",
+                resolution_gate="tenant_context_rule",
+                matched_category="direct_instruction_override",
+                normalized_prompt=normalized,
+                details=self._attach_classifier_details(tenant_block, first_verdict),
+            )
+
+        structural = analyze_structural(
+            normalized,
+            block_threshold=self._config.structural.structural_block_threshold,
+            allow_threshold=self._config.structural.structural_allow_threshold,
+        )
+        if structural.decision == "block":
+            return CheckResult(
+                decision="block",
+                resolution_gate="structural",
+                matched_category="direct_instruction_override",
+                normalized_prompt=normalized,
+                details=self._attach_classifier_details(
+                    {"structural": structural.details, "matched_pattern": structural.matched_pattern},
+                    first_verdict,
+                ),
+            )
+        if structural.decision == "allow":
+            if (
+                first_verdict is not None
+                and first_verdict.decision == "uncertain"
+                and self._config.gray_zone_policy == "escalate"
+            ):
+                return self._escalate_uncertain_classifier(
+                    prompt=prompt,
+                    normalized=normalized,
+                    fusion_details={"structural": structural.details, "matched_pattern": structural.matched_pattern},
+                    matched_category="benign_adjacent",
+                    classifier_verdict=first_verdict,
+                )
+            if first_verdict is not None and self._config.guard_model.veto_enabled:
+                vetoed = self._apply_classifier_veto(
+                    "allow",
+                    "structural",
+                    first_verdict,
+                    {"structural": structural.details, "matched_pattern": structural.matched_pattern},
+                )
+                if vetoed[0] == "block":
+                    return CheckResult(
+                        decision="block",
+                        resolution_gate=vetoed[1],
+                        matched_category="benign_adjacent",
+                        normalized_prompt=normalized,
+                        details=vetoed[2],
+                    )
+            return CheckResult(
+                decision="allow",
+                resolution_gate="structural",
+                matched_category="benign_adjacent",
+                normalized_prompt=normalized,
+                details=self._attach_classifier_details(
+                    {"structural": structural.details, "matched_pattern": structural.matched_pattern},
+                    first_verdict,
+                ),
+            )
+
+        classifier_future = self._start_parallel_classifier(prompt, first_verdict=first_verdict)
 
         semantic = self._embedder.embed_semantic(normalized)
         slug = self._engine.assign_category(normalized)
@@ -470,9 +711,42 @@ class RuntimeChecker:
 
         margin = attack_sim - benign_sim
         if (
-            benign_sim >= thresholds.benign_allow_floor
+            not self._skip_benign_fast_path(normalized)
+            and benign_sim >= thresholds.benign_allow_floor
             and margin <= -thresholds.benign_margin_delta
         ):
+            if (
+                first_verdict is not None
+                and first_verdict.decision == "uncertain"
+                and self._config.gray_zone_policy == "escalate"
+            ):
+                return self._escalate_uncertain_classifier(
+                    prompt=prompt,
+                    normalized=normalized,
+                    fusion_details={
+                        "attack_sim": attack_sim,
+                        "benign_sim": benign_sim,
+                        "benign_fast_path": True,
+                    },
+                    matched_category=matched_category,
+                    classifier_verdict=first_verdict,
+                )
+            allow_details = self._attach_classifier_details(
+                {"attack_sim": attack_sim, "benign_sim": benign_sim},
+                first_verdict,
+            )
+            if first_verdict is not None and self._config.guard_model.veto_enabled:
+                vetoed = self._apply_classifier_veto("allow", "benign_fast_path", first_verdict, allow_details)
+                if vetoed[0] == "block":
+                    return CheckResult(
+                        decision="block",
+                        resolution_gate=vetoed[1],
+                        attack_sim=attack_sim,
+                        benign_sim=benign_sim,
+                        normalized_prompt=normalized,
+                        matched_category=matched_category,
+                        details=vetoed[2],
+                    )
             return CheckResult(
                 decision="allow",
                 resolution_gate="benign_fast_path",
@@ -480,6 +754,7 @@ class RuntimeChecker:
                 benign_sim=benign_sim,
                 normalized_prompt=normalized,
                 matched_category=matched_category,
+                details=allow_details,
             )
 
         top_hit = attack_hits[0] if attack_hits else None
@@ -500,14 +775,17 @@ class RuntimeChecker:
                 matched_category=matched_category,
                 top_attack_entry_id=top_hit.entry_id,
                 normalized_prompt=normalized,
-                details={
-                    "attack_sim": attack_sim,
-                    "benign_sim": benign_sim,
-                    "corpus_match_score": top_hit.score,
-                },
+                details=self._attach_classifier_details(
+                    {
+                        "attack_sim": attack_sim,
+                        "benign_sim": benign_sim,
+                        "corpus_match_score": top_hit.score,
+                    },
+                    first_verdict,
+                ),
             )
 
-        classifier_verdict = self._collect_classifier_verdict(classifier_future)
+        classifier_verdict = self._collect_classifier_verdict(classifier_future, first_verdict=first_verdict)
         classifier_prob = (
             classifier_verdict.confidence if classifier_verdict is not None else None
         )
@@ -527,11 +805,14 @@ class RuntimeChecker:
             w_comm=cfg.fusion.w_comm,
             w_clf=cfg.fusion.w_clf if classifier_prob is not None else 0.0,
             w_benign=cfg.fusion.w_benign,
+            w_session=cfg.fusion.w_session,
+            session_escalation_score=session_score,
             weak_signal_floor=cfg.fusion.weak_signal_floor,
         )
 
         fusion_details = {
             "session_id": session_id,
+            "session_escalation_score": session_score,
             "contrastive_margin": fusion.contrastive_margin,
             "weak_signal_count": fusion.weak_signal_count,
             "block_threshold": thresholds.block_threshold,
@@ -546,13 +827,62 @@ class RuntimeChecker:
         if classifier_verdict is not None:
             fusion_details.update(self._classifier_details(classifier_verdict))
 
+        tenant_boost = tenant_severity_boost(
+            normalized,
+            self._tenant_lexicon,
+            boost_restricted=cfg.tenant_context.severity_boost_restricted,
+            boost_internal=cfg.tenant_context.severity_boost_internal,
+        )
+        fused_score = min(1.0, fusion.fused_score + tenant_boost)
+        if session_score > 0:
+            fusion_details["session_escalation_score"] = session_score
+        if tenant_boost > 0:
+            fusion_details["tenant_severity_boost"] = tenant_boost
+        fusion_details["fused_score"] = fused_score
+
         decision, gate = route_fusion_decision(
-            fused_score=fusion.fused_score,
+            fused_score=fused_score,
             weak_signal_count=fusion.weak_signal_count,
             block_threshold=thresholds.block_threshold,
             allow_threshold=thresholds.allow_threshold,
             min_weak_signals_for_gray=cfg.fusion.min_weak_signals_for_gray,
         )
+
+        decision, gate, fusion_details = self._apply_classifier_veto(
+            decision,
+            gate,
+            classifier_verdict,
+            fusion_details,
+        )
+
+        if (
+            self._uses_classifier_first()
+            and classifier_verdict is not None
+            and classifier_verdict.decision == "uncertain"
+            and decision == "allow"
+            and gate == "fusion_allow"
+            and self._config.gray_zone_policy == "escalate"
+        ):
+            return self._escalate_uncertain_classifier(
+                prompt=prompt,
+                normalized=normalized,
+                fusion_details=fusion_details,
+                matched_category=matched_category,
+                classifier_verdict=classifier_verdict,
+            )
+
+        if (
+            decision == "allow"
+            and gate == "fusion_allow"
+            and self._tenant_override_escalation(normalized, classifier_verdict)
+            and not self._config.gray_terminal
+        ):
+            return self._resolve_gray(
+                prompt=prompt,
+                normalized=normalized,
+                fusion_details=fusion_details,
+                matched_category=matched_category,
+            )
 
         if decision == "gray" and gate == "fusion_gray":
             if self._config.gray_terminal:
@@ -577,7 +907,7 @@ class RuntimeChecker:
         return CheckResult(
             decision=decision,
             resolution_gate=gate,
-            fused_score=fusion.fused_score,
+            fused_score=fused_score,
             attack_sim=attack_sim,
             benign_sim=benign_sim,
             matched_category=matched_category,

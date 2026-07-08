@@ -1,0 +1,16 @@
+# Law domain triage overrides (merged when --domain law or PRISMGUARD_DOMAIN=law)
+triage:
+  block_threshold: 0.74
+  allow_threshold: 0.40
+fusion:
+  w_clf: 0.35
+guard_model:
+  uncertain_high: 0.55
+  veto_threshold: 0.55
+structural:
+  structural_block_threshold: 0.75
+categories:
+  direct_instruction_override:
+    block_threshold: 0.72
+  roleplay_jailbreak:
+    block_threshold: 0.73

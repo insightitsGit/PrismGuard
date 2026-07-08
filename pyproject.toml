@@ -85,22 +85,26 @@ benchmark-law = [
     "httpx>=0.27",
     "langgraph>=0.2",
     "llm-guard>=0.3.13",
-    "llamafirewall>=1.0.0",
+    "prismguard[embeddings]",
 ]
 llm-guard = [
     "llm-guard>=0.3.13",
 ]
-llamafirewall = [
-    "llamafirewall>=1.0.0",
-]
 judge = [
     "openai>=1.0.0",
+]
+embeddings = [
+    "sentence-transformers>=3.0.0",
+]
+calibration = [
+    "prismguard[seed,prism]",
 ]
 all = [
     "prismguard[pgvector,chroma,pinecone,weaviate,guard-model,seed,dev]",
 ]
 
 [project.scripts]
+prismguard = "prismguard.app_cli:main"
 prismguard-seed = "prismguard.cli:main"
 prismguard-model = "prismguard.models.cli:main"
 
@@ -109,7 +113,7 @@ where = ["."]
 include = ["prismguard*", "benchmark*"]
 
 [tool.setuptools.package-data]
-prismguard = ["config/triage.yaml", "config/storage.yaml", "seed/corpus/**/*", "models/artifacts/**/*"]
+prismguard = ["config/triage.yaml", "config/storage.yaml", "seed/corpus/**/*", "models/artifacts/**/*", "domains/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

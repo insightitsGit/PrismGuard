@@ -10,6 +10,30 @@ from benchmark.law.shared.rubric import score_law_answer
 from benchmark.law.shared.types import GuardOutcome, StackResult
 
 
+def _guard_after_output_scan(guard_out: GuardOutcome, answer: str) -> GuardOutcome:
+    """Phase 4: post-generation exfiltration scan on model output."""
+    if guard_out.decision == "block" or not answer:
+        return guard_out
+    from prismguard.runtime.output_scan import scan_output
+
+    scan = scan_output(answer)
+    if scan.decision != "block":
+        return guard_out
+    details = dict(guard_out.details)
+    details["output_scan"] = {"matched_pattern": scan.matched_pattern, **scan.details}
+    return GuardOutcome(
+        decision="block",
+        resolution_gate="output_scan",
+        guardrail=guard_out.guardrail,
+        guard_classifier_calls=guard_out.guard_classifier_calls,
+        guard_generative_llm_calls=guard_out.guard_generative_llm_calls,
+        guard_model_tier="output_side_guard",
+        latency_ms=guard_out.latency_ms,
+        mapped_category=guard_out.mapped_category or "data_exfiltration_via_output",
+        details=details,
+    )
+
+
 class LawGraphState(TypedDict, total=False):
     text: str
     guard: GuardOutcome
@@ -73,6 +97,20 @@ def run_chorus_pipeline(
             traffic_kind=traffic_kind,
         )
     answer, llm_calls = assistant.answer(query)
+    guard_out = _guard_after_output_scan(guard_out, answer)
+    if guard_out.decision == "block":
+        return StackResult(
+            stack_id=stack_id,
+            framework="chorusgraph",
+            guardrail=guard.name,
+            query_id=query.query_id,
+            input_text=text,
+            guard=guard_out,
+            answer=answer,
+            latency_ms=(time.perf_counter() - start) * 1000,
+            agent_llm_calls=llm_calls,
+            traffic_kind=traffic_kind,
+        )
     return StackResult(
         stack_id=stack_id,
         framework="chorusgraph",
@@ -141,6 +179,19 @@ def run_langgraph_pipeline(
                 traffic_kind=traffic_kind,
             )
         answer = final.get("answer", "")
+        guard_out = _guard_after_output_scan(guard_out, answer)
+        if guard_out.decision == "block":
+            return StackResult(
+                stack_id=stack_id,
+                framework="langgraph",
+                guardrail=guard.name,
+                query_id=query.query_id if query else None,
+                input_text=text,
+                guard=guard_out,
+                answer=answer,
+                latency_ms=(time.perf_counter() - start) * 1000,
+                traffic_kind=traffic_kind,
+            )
         return StackResult(
             stack_id=stack_id,
             framework="langgraph",

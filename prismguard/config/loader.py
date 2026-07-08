@@ -45,6 +45,8 @@ class StructuralConfig(BaseModel):
 class EmbeddingConfig(BaseModel):
     chunk_overlap_ratio: float = 0.25
     suspicious_ngram_floor: float = 0.15
+    prefer_transformer: bool = True
+    model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 class RoutingConfig(BaseModel):
@@ -74,11 +76,21 @@ class JudgeConfig(BaseModel):
 
 class GuardModelConfig(BaseModel):
     enabled: bool = True
-    classifier_mode: Literal["parallel", "gray_only"] = "parallel"
+    classifier_mode: Literal["first", "parallel", "gray_only"] = "parallel"
     artifact_id: str = "prism-pi-v1"
     artifact_path: str = ""
     uncertain_low: float = 0.35
     uncertain_high: float = 0.65
+    veto_enabled: bool = True
+    veto_threshold: float = 0.65
+
+
+class TenantContextConfig(BaseModel):
+    enabled: bool = False
+    lexicon_path: str = ""
+    severity_boost_restricted: float = 0.15
+    severity_boost_internal: float = 0.08
+    force_classifier_on_override: bool = True
 
 
 class TriageConfig(BaseModel):
@@ -94,6 +106,7 @@ class TriageConfig(BaseModel):
     cache: CacheConfig = Field(default_factory=CacheConfig)
     judge: JudgeConfig = Field(default_factory=JudgeConfig)
     guard_model: GuardModelConfig = Field(default_factory=GuardModelConfig)
+    tenant_context: TenantContextConfig = Field(default_factory=TenantContextConfig)
     categories: dict[str, CategoryOverride] = Field(default_factory=dict)
 
     @classmethod
@@ -106,10 +119,35 @@ def _default_config_path() -> Path:
 
 
 @lru_cache(maxsize=4)
-def load_triage_config(path: str | Path | None = None) -> TriageConfig:
+def load_triage_config(path: str | Path | None = None, *, domain: str | None = None) -> TriageConfig:
     config_path = Path(path) if path is not None else _default_config_path()
     with config_path.open(encoding="utf-8") as handle:
         raw = yaml.safe_load(handle)
     if not isinstance(raw, dict):
         raise ValueError(f"Expected mapping in triage config, got {type(raw)!r}")
+    if domain:
+        raw = _merge_domain_triage(raw, domain)
     return TriageConfig.from_mapping(raw)
+
+
+def _merge_domain_triage(base: dict, domain: str) -> dict:
+    from prismguard.domains.registry import get_domain_pack
+
+    pack = get_domain_pack(domain)
+    triage_path = pack.overlay_path.parent / "triage.yaml"
+    if not triage_path.is_file():
+        return base
+    overlay = yaml.safe_load(triage_path.read_text(encoding="utf-8"))
+    if not isinstance(overlay, dict):
+        return base
+    merged = dict(base)
+    for key in ("triage", "fusion", "benign_fast_path", "guard_model", "tenant_context", "structural"):
+        if key in overlay:
+            section = dict(merged.get(key) or {})
+            section.update(overlay[key])
+            merged[key] = section
+    if "categories" in overlay:
+        cats = dict(merged.get("categories") or {})
+        cats.update(overlay["categories"])
+        merged["categories"] = cats
+    return merged

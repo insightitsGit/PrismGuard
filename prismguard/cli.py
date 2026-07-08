@@ -93,11 +93,38 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Skip post-import prismRAG taxonomy mapping + dual-vector embed",
     )
     import_cmd.add_argument(
+        "--domain",
+        default=None,
+        choices=["law", "healthcare", "finance"],
+        help="Optional domain pack overlay after import",
+    )
+    import_cmd.add_argument(
         "--force-embed",
         action="store_true",
         help="Re-embed all seed entries even if vectors already exist",
     )
     return parser
+
+
+def _import_domain_overlay(storage, domain: str, *, dry_run: bool, skip_taxonomy: bool) -> dict:
+    from prismguard.domains.registry import get_domain_pack
+    from prismguard.seed.parse import parse_seed_file
+
+    pack = get_domain_pack(domain)
+    parsed = parse_seed_file(pack.overlay_path)
+    report = import_seeds(
+        storage,
+        parsed,
+        mode="update",
+        dry_run=dry_run,
+        skip_taxonomy=skip_taxonomy,
+    )
+    return {
+        "domain": pack.name,
+        "overlay": str(pack.overlay_path),
+        "inserted": report.inserted,
+        "updated": report.updated,
+    }
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -113,6 +140,7 @@ def main(argv: list[str] | None = None) -> None:
     storage = _storage_for_cli(args.backend)
 
     try:
+        domain_report = None
         if args.bundled:
             report = import_bundled_seed(
                 storage,
@@ -137,6 +165,22 @@ def main(argv: list[str] | None = None) -> None:
                 skip_taxonomy=args.skip_taxonomy,
                 force_embed=args.force_embed,
             )
+        if args.domain and not args.dry_run:
+            domain_report = _import_domain_overlay(
+                storage,
+                args.domain,
+                dry_run=False,
+                skip_taxonomy=args.skip_taxonomy,
+            )
+        elif args.domain and args.dry_run:
+            domain_report = _import_domain_overlay(
+                storage,
+                args.domain,
+                dry_run=True,
+                skip_taxonomy=True,
+            )
+        else:
+            domain_report = None
     finally:
         storage.close()
 
@@ -153,6 +197,8 @@ def main(argv: list[str] | None = None) -> None:
     }
     if report.taxonomy is not None:
         output["taxonomy"] = _taxonomy_output(report.taxonomy)
+    if domain_report is not None:
+        output["domain_pack"] = domain_report
 
     print(json.dumps(output, indent=2))
 

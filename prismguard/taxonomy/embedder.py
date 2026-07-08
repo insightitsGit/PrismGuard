@@ -60,13 +60,20 @@ class HashEmbedder:
         return _hash_to_vector(f"cat:{category_slug}:{text}", self.category_dim)
 
 
-def create_embedder(prefer_transformer: bool = True) -> Embedder:
+def create_embedder(prefer_transformer: bool = True, *, model_name: str | None = None) -> Embedder:
     if prefer_transformer:
         try:
-            return SentenceTransformerEmbedder()
-        except ImportError:
+            return SentenceTransformerEmbedder(model_name=model_name or "sentence-transformers/all-MiniLM-L6-v2")
+        except Exception:
             pass
     return HashEmbedder()
+
+
+def create_embedder_from_config(cfg) -> Embedder:
+    return create_embedder(
+        prefer_transformer=getattr(cfg.embedding, "prefer_transformer", True),
+        model_name=getattr(cfg.embedding, "model_name", None),
+    )
 
 
 class SentenceTransformerEmbedder:

@@ -32,6 +32,12 @@ def main(argv: list[str] | None = None) -> int:
     train_cmd.add_argument("--max-length", type=int, default=256)
     train_cmd.add_argument("--max-train-examples", type=int, default=0)
     train_cmd.add_argument("--feedback-jsonl", action="append", default=[])
+    train_cmd.add_argument(
+        "--seed-yaml",
+        action="append",
+        default=[],
+        help="Extra labeled seed YAML (e.g. law overlay). Repeatable.",
+    )
     train_cmd.add_argument("--output-dir", default="")
 
     stats_cmd = sub.add_parser("corpus-stats", help="Show training corpus size from seed DB")
@@ -39,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
     stats_cmd.add_argument("--from-storage", action="store_true")
     stats_cmd.add_argument("--storage-backend", default="")
     stats_cmd.add_argument("--feedback-jsonl", action="append", default=[])
+    stats_cmd.add_argument("--seed-yaml", action="append", default=[])
+
+    calibrate_cmd = sub.add_parser("calibrate", help="Holdout-safe fusion/threshold tuning")
+    calibrate_cmd.add_argument("--domain", default="law", choices=["law", "healthcare", "finance"])
+    calibrate_cmd.add_argument("--output", type=Path, default=Path("triage.tuned.yaml"))
 
     args = parser.parse_args(argv)
     if args.command == "export":
@@ -83,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
             train_argv.extend(["--storage-backend", args.storage_backend])
         for path in args.feedback_jsonl:
             train_argv.extend(["--feedback-jsonl", path])
+        for path in args.seed_yaml:
+            train_argv.extend(["--seed-yaml", path])
         if args.output_dir:
             train_argv.extend(["--output-dir", args.output_dir])
         return train_main(train_argv)
@@ -93,10 +106,31 @@ def main(argv: list[str] | None = None) -> int:
         manifest = print_corpus_stats(
             profile=args.profile,
             feedback_paths=[Path(p) for p in args.feedback_jsonl],
+            seed_yaml_paths=[Path(p) for p in args.seed_yaml],
             from_storage=args.from_storage,
             storage_backend=args.storage_backend,
         )
         return 0 if manifest.total_examples > 0 else 1
+
+    if args.command == "calibrate":
+        from prismguard.calibration.tune import tune_thresholds, write_tuned_config
+
+        result = tune_thresholds(domain=args.domain)
+        write_tuned_config(result, args.output)
+        print(
+            json.dumps(
+                {
+                    "block_threshold": result.block_threshold,
+                    "allow_threshold": result.allow_threshold,
+                    "w_clf": result.w_clf,
+                    "holdout_block_rate": result.holdout_block_rate,
+                    "normal_allow_rate": result.normal_allow_rate,
+                    "output": str(args.output),
+                },
+                indent=2,
+            )
+        )
+        return 0
 
     parser.error(f"Unknown command: {args.command}")
     return 2

@@ -1,4 +1,4 @@
-"""In-process law benchmark runner (no Docker required for CPL/LPL; CGL/LFL need deps)."""
+"""In-process law benchmark runner (no Docker required for CPL/LPL; CGL/LGL need llm-guard)."""
 
 from __future__ import annotations
 
@@ -10,18 +10,14 @@ from fastapi.testclient import TestClient
 
 from benchmark.law.atk.attack_runner import build_traffic_rows
 from benchmark.law.compare_law import compare_law, write_comparison_report
-from benchmark.law.shared.guards import (
-    LLMGuardGate,
-    LlamaFirewallGate,
-    PrismGuardGate,
-)
+from benchmark.law.shared.guards import LLMGuardGate, PrismGuardGate
 from benchmark.law.shared.http_app import create_app
 from benchmark.law.shared.seed_overlap import verify_holdout_overlap
 
 STACKS = [
     ("CPL", "chorusgraph", PrismGuardGate),
     ("CGL", "chorusgraph", LLMGuardGate),
-    ("LFL", "langgraph", LlamaFirewallGate),
+    ("LGL", "langgraph", LLMGuardGate),
     ("LPL", "langgraph", PrismGuardGate),
 ]
 

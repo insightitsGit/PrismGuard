@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
+from prismguard.feedback.store import FeedbackStore, default_feedback_store_path
 from prismguard.seed.importer import ImportOptions, SeedImporter
 from prismguard.seed.models import EntrySeed, ParsedSeed
 from prismguard.storage.protocols import StorageBackend
@@ -18,6 +21,7 @@ def _normalize_prompt(text: str) -> str:
     from prismguard.runtime.normalize import normalize_prompt
 
     return normalize_prompt(text)
+
 
 ReviewOrigin = Literal["guard_model", "llm_judge"]
 ReviewStatus = Literal["pending", "approved", "rejected"]
@@ -50,17 +54,32 @@ class CalibrationEntry:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
+def _persist_enabled() -> bool:
+    return os.environ.get("PRISMGUARD_FEEDBACK_PERSIST", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
 class FeedbackReviewService:
     """
     Human-in-the-loop feedback: confirmed blocks queue for review before seed append.
     Near-miss allows become calibration data, not seed corpus entries.
     """
 
-    def __init__(self, storage: StorageBackend) -> None:
+    def __init__(self, storage: StorageBackend, *, store_path: Path | None = None) -> None:
         self._storage = storage
         self._importer = SeedImporter(storage)
+        self._store = FeedbackStore(store_path or default_feedback_store_path())
         self._queue: dict[str, ReviewItem] = {}
         self._calibration: list[CalibrationEntry] = []
+        if _persist_enabled():
+            self._queue, self._calibration = self._store.load()
+
+    def _flush(self) -> None:
+        if _persist_enabled():
+            self._store.save(self._queue, self._calibration)
 
     @property
     def pending_count(self) -> int:
@@ -96,6 +115,7 @@ class FeedbackReviewService:
             check_result=check_result,
         )
         self._queue[item.id] = item
+        self._flush()
         return item
 
     def record_near_miss_allow(
@@ -115,6 +135,7 @@ class FeedbackReviewService:
             guard_model_confidence=check_result.details.get("guard_model_confidence"),
         )
         self._calibration.append(entry)
+        self._flush()
         return entry
 
     def approve_block(self, review_id: str, *, reviewer: str) -> str | None:
@@ -139,6 +160,7 @@ class FeedbackReviewService:
         item.status = "approved"
         item.reviewed_by = reviewer
         item.reviewed_at = datetime.now(UTC)
+        self._flush()
         return item.id
 
     def reject_block(self, review_id: str, *, reviewer: str) -> bool:
@@ -148,6 +170,7 @@ class FeedbackReviewService:
         item.status = "rejected"
         item.reviewed_by = reviewer
         item.reviewed_at = datetime.now(UTC)
+        self._flush()
         return True
 
     def export_training_jsonl(
@@ -157,7 +180,6 @@ class FeedbackReviewService:
         include_approved_blocks: bool = True,
         include_calibration_allows: bool = False,
     ) -> int:
-        """Export reviewed feedback rows for classifier retraining (open loop)."""
         rows: list[dict[str, str]] = []
         if include_approved_blocks:
             for item in self._queue.values():

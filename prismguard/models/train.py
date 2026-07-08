@@ -174,6 +174,7 @@ def load_corpus_for_training(
     *,
     profile: BundledProfile = "full",
     feedback_paths: list[Path] | None = None,
+    seed_yaml_paths: list[Path] | None = None,
     from_storage: bool = False,
     storage_backend: str = "",
 ) -> tuple[list[TrainingExample], TrainingCorpusManifest]:
@@ -194,6 +195,7 @@ def load_corpus_for_training(
         parsed_seed=parsed,
         storage=storage,
         feedback_paths=feedback_paths,
+        seed_yaml_paths=seed_yaml_paths,
         profile=profile,
     )
 
@@ -202,12 +204,14 @@ def print_corpus_stats(
     *,
     profile: BundledProfile = "full",
     feedback_paths: list[Path] | None = None,
+    seed_yaml_paths: list[Path] | None = None,
     from_storage: bool = False,
     storage_backend: str = "",
 ) -> TrainingCorpusManifest:
     _, manifest = load_corpus_for_training(
         profile=profile,
         feedback_paths=feedback_paths,
+        seed_yaml_paths=seed_yaml_paths,
         from_storage=from_storage,
         storage_backend=storage_backend,
     )
@@ -242,13 +246,21 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="Reviewed feedback export (repeatable). May be passed multiple times.",
     )
+    parser.add_argument(
+        "--seed-yaml",
+        action="append",
+        default=[],
+        help="Extra labeled seed YAML (e.g. law overlay). Repeatable.",
+    )
     parser.add_argument("--output-dir", default="")
     args = parser.parse_args(argv)
 
     feedback_paths = [Path(p) for p in args.feedback_jsonl]
+    seed_yaml_paths = [Path(p) for p in args.seed_yaml]
     examples, manifest = load_corpus_for_training(
         profile=args.profile,  # type: ignore[arg-type]
         feedback_paths=feedback_paths,
+        seed_yaml_paths=seed_yaml_paths,
         from_storage=args.from_storage,
         storage_backend=args.storage_backend,
     )

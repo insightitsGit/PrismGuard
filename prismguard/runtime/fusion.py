@@ -15,6 +15,7 @@ class FusionResult:
     classifier_prob: float
     contrastive_margin: float
     weak_signal_count: int
+    session_score: float = 0.0
 
 
 def count_weak_signals(
@@ -54,6 +55,8 @@ def fuse_signals(
     w_comm: float = 0.10,
     w_clf: float = 0.0,
     w_benign: float = 0.30,
+    w_session: float = 0.0,
+    session_escalation_score: float = 0.0,
     weak_signal_floor: float = 0.25,
 ) -> FusionResult:
     severity_map = {"low": 0.2, "medium": 0.5, "high": 0.8, "critical": 1.0}
@@ -68,6 +71,7 @@ def fuse_signals(
         + w_sev * sev
         + w_comm * community_confidence
         + w_clf * clf
+        + w_session * session_escalation_score
         - w_benign * benign_sim
     )
     fused = max(0.0, min(1.0, fused))
@@ -91,4 +95,5 @@ def fuse_signals(
         classifier_prob=clf,
         contrastive_margin=margin,
         weak_signal_count=weak_count,
+        session_score=session_escalation_score,
     )

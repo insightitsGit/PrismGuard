@@ -167,11 +167,19 @@ def merge_training_examples(
     return list(merged.values())
 
 
+def examples_from_yaml_seed(path: Path) -> list[TrainingExample]:
+    from prismguard.seed.parse import parse_seed_file
+
+    parsed = parse_seed_file(path)
+    return examples_from_parsed_seed(parsed)
+
+
 def build_training_corpus(
     *,
     parsed_seed: ParsedSeed | None = None,
     storage: StorageBackend | None = None,
     feedback_paths: list[Path] | None = None,
+    seed_yaml_paths: list[Path] | None = None,
     profile: BundledProfile | str = "full",
 ) -> tuple[list[TrainingExample], TrainingCorpusManifest]:
     groups: list[list[TrainingExample]] = []
@@ -181,6 +189,8 @@ def build_training_corpus(
         groups.append(examples_from_storage(storage))
     for path in feedback_paths or []:
         groups.append(_read_feedback_jsonl(path))
+    for path in seed_yaml_paths or []:
+        groups.append(examples_from_yaml_seed(path))
 
     examples = merge_training_examples(*groups) if groups else []
     manifest = corpus_manifest(examples, profile=profile)

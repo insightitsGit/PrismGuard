@@ -8,18 +8,21 @@ from typing import Any
 
 from benchmark.law.shared.seed_overlap import verify_holdout_overlap
 
-STACK_FILES = ("cpl", "cgl", "lfl", "lpl")
+STACK_FILES = ("cpl", "cgl", "lgl", "lpl")
 UNCONFIGURED_GATES = frozenset(
     {
         "llm_guard_unconfigured",
-        "llamafirewall_unconfigured",
-        "llamafirewall_error",
     }
 )
-ESCALATION_GATES = frozenset({"guard_model", "llm_judge"})
-GUARD_MODEL_GATES = frozenset({"guard_model"})
+ESCALATION_GATES = frozenset({"guard_model", "guard_model_veto", "llm_judge"})
+GUARD_MODEL_GATES = frozenset({"guard_model", "guard_model_veto", "tenant_context_rule"})
 JUDGE_GATES = frozenset({"llm_judge"})
-ATTACK_SOURCES = ("legal_overlay_seeded", "legal_overlay_holdout", "bundled_full")
+ATTACK_SOURCES = (
+    "legal_overlay_seeded",
+    "legal_overlay_holdout",
+    "tenant_sim_holdout",
+    "bundled_full",
+)
 
 
 def _escalation_metrics(rows: list[dict[str, Any]]) -> dict[str, float | None]:
@@ -156,11 +159,20 @@ def summarize_stack(rows: list[dict[str, Any]]) -> dict[str, Any]:
     false_positives = [r for r in benign_rows if r.get("decision") == "block"]
 
     by_category: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "blocked": 0})
+    by_source_category: dict[str, dict[str, dict[str, int]]] = defaultdict(
+        lambda: defaultdict(lambda: {"total": 0, "blocked": 0})
+    )
+    by_gate: dict[str, int] = defaultdict(int)
     for row in attack_rows:
         cat = row.get("expected_category") or row.get("mapped_category") or "unknown"
         by_category[cat]["total"] += 1
         if row.get("decision") == "block":
             by_category[cat]["blocked"] += 1
+        source = row.get("attack_source") or "unknown"
+        by_source_category[source][cat]["total"] += 1
+        if row.get("decision") == "block":
+            by_source_category[source][cat]["blocked"] += 1
+        by_gate[str(row.get("resolution_gate") or "unknown")] += 1
 
     task_rows = [r for r in rows if r.get("traffic_kind") == "benign" and r.get("task_success") is not None]
     tiers = {r.get("guard_model_tier") for r in rows if r.get("guard_model_tier")}
@@ -185,6 +197,18 @@ def summarize_stack(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "by_category_block_rate": {
             cat: _rate(vals["blocked"], vals["total"]) for cat, vals in by_category.items()
         },
+        "by_source_category_block_rate": {
+            source: {
+                cat: _rate(vals["blocked"], vals["total"])
+                for cat, vals in sorted(categories.items())
+            }
+            for source, categories in sorted(by_source_category.items())
+        },
+        "resolution_gate_counts": dict(sorted(by_gate.items())),
+        "benign_adjacent_fp_rate": _rate(
+            len([r for r in rows if r.get("traffic_kind") == "benign_adjacent" and r.get("decision") == "block"]),
+            len([r for r in rows if r.get("traffic_kind") == "benign_adjacent"]),
+        ),
         "normal_scenarios": _normal_scenarios_summary(rows),
     }
 
@@ -210,13 +234,15 @@ def compare_law(results_dir: Path) -> dict[str, Any]:
             "holdout_clean": overlap.holdout_clean,
             "holdout_vs_prismguard_seed_collisions": overlap.holdout_vs_prismguard_seed,
             "holdout_vs_seeded_overlay_collisions": overlap.holdout_vs_seeded_overlay,
+            "holdout_vs_bundled_full_collisions": overlap.holdout_vs_bundled_full,
+            "holdout_vs_tenant_sim_collisions": overlap.holdout_vs_tenant_sim,
             "bundled_full_vs_authored_count": overlap.bundled_full_vs_authored_count,
             "bundled_full_minus_authored_count": overlap.bundled_full_minus_authored_count,
         },
         "stacks": stacks,
         "pairs": [
             {"name": "CPL_vs_CGL", "left": "CPL", "right": "CGL", "isolates": "guardrail@chorusgraph"},
-            {"name": "LPL_vs_LFL", "left": "LPL", "right": "LFL", "isolates": "guardrail@langgraph"},
+            {"name": "LPL_vs_LGL", "left": "LPL", "right": "LGL", "isolates": "guardrail@langgraph"},
             {"name": "CPL_vs_LPL", "left": "CPL", "right": "LPL", "isolates": "framework@prismguard"},
         ],
         "paired_deltas": {},
@@ -324,10 +350,24 @@ def write_comparison_report(results_dir: Path, comparison: dict[str, Any]) -> No
         [
             "## Overlap check",
             f"- holdout_clean: {overlap.get('holdout_clean')}",
+            f"- holdout_vs_prismguard_seed_collisions: {overlap.get('holdout_vs_prismguard_seed_collisions')}",
+            f"- holdout_vs_seeded_overlay_collisions: {overlap.get('holdout_vs_seeded_overlay_collisions')}",
+            f"- holdout_vs_bundled_full_collisions: {overlap.get('holdout_vs_bundled_full_collisions')}",
+            f"- holdout_vs_tenant_sim_collisions: {overlap.get('holdout_vs_tenant_sim_collisions')}",
+            f"- bundled_full_vs_authored_count: {overlap.get('bundled_full_vs_authored_count')}",
             f"- bundled_full_minus_authored_count: {overlap.get('bundled_full_minus_authored_count')}",
             "",
         ]
     )
+
+    lines.extend(["## Resolution gate distribution (attacks)", ""])
+    for stack_id, summary in comparison.get("stacks", {}).items():
+        gates = summary.get("resolution_gate_counts") or {}
+        if gates:
+            lines.append(f"### {stack_id}")
+            for gate, count in gates.items():
+                lines.append(f"- {gate}: {count}")
+            lines.append("")
 
     (results_dir / "comparison.json").write_text(json.dumps(comparison, indent=2), encoding="utf-8")
     (results_dir / "COMPARISON_REPORT.md").write_text("\n".join(lines), encoding="utf-8")

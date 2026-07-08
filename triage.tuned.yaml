@@ -1,0 +1,56 @@
+gray_zone_policy: escalate
+guard_model:
+  enabled: true
+  classifier_mode: parallel
+  artifact_id: prism-pi-v1
+  artifact_path: ''
+  uncertain_low: 0.35
+  uncertain_high: 0.65
+  veto_enabled: true
+  veto_threshold: 0.65
+tenant_context:
+  enabled: false
+  lexicon_path: ''
+  severity_boost_restricted: 0.15
+  severity_boost_internal: 0.08
+  force_classifier_on_override: true
+normalization:
+  max_obfuscation_depth: 3
+fusion:
+  w_sim: 0.35
+  w_graph: 0.1
+  w_rule: 0.2
+  w_sev: 0.15
+  w_comm: 0.08
+  w_clf: 0.25
+  w_benign: 0.3
+  w_session: 0.15
+  weak_signal_floor: 0.25
+  min_weak_signals_for_gray: 2
+benign_fast_path:
+  benign_allow_floor: 0.72
+  benign_margin_delta: 0.08
+triage:
+  block_threshold: 0.68
+  allow_threshold: 0.38
+  corpus_match_override_threshold: 0.92
+structural:
+  structural_block_threshold: 0.85
+  structural_allow_threshold: 0.2
+embedding:
+  chunk_overlap_ratio: 0.25
+  suspicious_ngram_floor: 0.15
+  prefer_transformer: true
+  model_name: sentence-transformers/all-MiniLM-L6-v2
+routing:
+  community_confidence_floor: 0.55
+cache:
+  semantic_cache_threshold: 0.97
+  ttl_seconds: 3600
+judge:
+  rate_cap_per_minute: 60
+  tighten_block_threshold_delta: 0.05
+  tighten_weak_signal_floor_delta: 0.1
+  accept_guard_at_lower_confidence_when_capped: true
+  confidence_floor: 0.7
+categories: {}

@@ -1,0 +1,7 @@
+{
+  "holdout_n": 14,
+  "block_rate_with_stub_weights": 0.7143,
+  "block_rate_without_stub_weights": 0.0714,
+  "decision": "zero_stub_weights",
+  "rationale": "Stub graph/community terms zeroed in triage.yaml; marginal holdout delta measured here."
+}

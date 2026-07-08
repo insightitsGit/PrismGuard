@@ -5,11 +5,20 @@ gray_zone_policy: escalate  # escalate | fail_open | fail_closed — requires Gu
 
 guard_model:
   enabled: true
-  classifier_mode: parallel  # parallel | gray_only (legacy cascade)
+  classifier_mode: first  # first | parallel | gray_only — first = 100% classifier then layers
   artifact_id: prism-pi-v1
   artifact_path: ""  # optional override; or set PRISMGUARD_GUARD_MODEL_PATH
   uncertain_low: 0.35
   uncertain_high: 0.65
+  veto_enabled: true
+  veto_threshold: 0.65
+
+tenant_context:
+  enabled: false  # opt-in; set true when tenant_lexicon.yaml is provided
+  lexicon_path: ""  # or PRISMGUARD_TENANT_LEXICON_PATH
+  severity_boost_restricted: 0.15
+  severity_boost_internal: 0.08
+  force_classifier_on_override: true
 
 normalization:
   max_obfuscation_depth: 3
@@ -42,6 +51,8 @@ structural:
 embedding:
   chunk_overlap_ratio: 0.25
   suspicious_ngram_floor: 0.15
+  prefer_transformer: true
+  model_name: sentence-transformers/all-MiniLM-L6-v2
 
 routing:
   community_confidence_floor: 0.55

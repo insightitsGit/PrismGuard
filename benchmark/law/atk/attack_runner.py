@@ -14,7 +14,7 @@ from benchmark.law.shared.normal_scenarios import load_normal_scenarios
 DEFAULT_TARGETS = {
     "CPL": "http://cpl:8080",
     "CGL": "http://cgl:8080",
-    "LFL": "http://lfl:8080",
+    "LGL": "http://lgl:8080",
     "LPL": "http://lpl:8080",
 }
 
