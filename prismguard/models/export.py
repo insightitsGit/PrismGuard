@@ -7,6 +7,7 @@ import json
 import shutil
 from pathlib import Path
 
+from prismguard.models.constants import DEFAULT_MAX_LENGTH
 from prismguard.models.hf_utils import load_training_model, load_training_tokenizer
 from prismguard.models.loader import default_artifacts_root
 from prismguard.models.model_card import ModelCard, write_model_card
@@ -30,7 +31,7 @@ def export_onnx_artifact(
     base_model: str,
     artifact_id: str,
     output_dir: Path | None = None,
-    max_length: int = 512,
+    max_length: int = DEFAULT_MAX_LENGTH,
 ) -> Path:
     try:
         import torch
@@ -125,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="Override output directory (default: packaged artifacts/<artifact-id>)",
     )
-    parser.add_argument("--max-length", type=int, default=512)
+    parser.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
     args = parser.parse_args(argv)
 
     output = Path(args.output_dir) if args.output_dir else None

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from prismguard.config.loader import GuardModelConfig, load_triage_config
-from prismguard.models.loader import load_onnx_classifier
+from prismguard.models.loader import load_corpus_manifest, load_onnx_classifier, resolve_artifact_dir
 from prismguard.models.verdict import GuardModelDecision
 
 
@@ -16,6 +16,12 @@ class GuardModelVerdict:
     latency_ms: float = 0.0
     model_id: str = "unknown"
     details: dict = field(default_factory=dict)
+    corpus_manifest: dict | None = None
+
+    @property
+    def injection_probability(self) -> float:
+        """Raw injection probability for downstream fusion (same as confidence)."""
+        return self.confidence
 
 
 class GuardModel(Protocol):
@@ -64,7 +70,10 @@ class PrismONNXGuardModel:
         self._config = config
         self._classifier = None
         self._init_error = ""
+        self._corpus_manifest: dict | None = None
         try:
+            artifact_dir = resolve_artifact_dir(config)
+            self._corpus_manifest = load_corpus_manifest(artifact_dir)
             self._classifier = load_onnx_classifier(config)
         except Exception as exc:  # pragma: no cover - missing artifact in dev
             self._init_error = str(exc)
@@ -93,14 +102,20 @@ class PrismONNXGuardModel:
                 latency_ms=(time.perf_counter() - start) * 1000,
                 model_id=self.model_id,
                 details={"error": self._init_error or "guard model artifact not loaded"},
+                corpus_manifest=self._corpus_manifest,
             )
         prediction = self._classifier.predict(text)
+        details = dict(prediction.details)
+        details["model_id"] = self.model_id
+        if self._corpus_manifest is not None:
+            details["corpus_manifest"] = self._corpus_manifest
         return GuardModelVerdict(
             decision=prediction.decision,  # type: ignore[arg-type]
             confidence=prediction.injection_probability,
             latency_ms=prediction.latency_ms,
             model_id=self.model_id,
-            details=prediction.details,
+            details=details,
+            corpus_manifest=self._corpus_manifest,
         )
 
 

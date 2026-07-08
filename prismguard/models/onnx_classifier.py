@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 
+from prismguard.models.calibration import apply_temperature, load_calibration
 from prismguard.models.model_card import ModelCard
 from prismguard.models.verdict import injection_probability_to_decision
 
@@ -44,6 +45,8 @@ class ONNXPromptInjectionClassifier:
         self._tokenizer = tokenizer
         self._uncertain_low = uncertain_low
         self._uncertain_high = uncertain_high
+        calibration = load_calibration(artifact_dir)
+        self._temperature = calibration.temperature if calibration else card.calibration_temperature
 
     @property
     def model_id(self) -> str:
@@ -112,6 +115,7 @@ class ONNXPromptInjectionClassifier:
             {"input_ids": input_ids, "attention_mask": attention_mask},
         )
         logits = np.asarray(outputs[0], dtype=np.float64)
+        logits = apply_temperature(logits, self._temperature)
         probs = _softmax(logits)[0]
         injection_probability = float(probs[self._card.injection_label])
         decision = injection_probability_to_decision(
@@ -128,5 +132,6 @@ class ONNXPromptInjectionClassifier:
                 "injection_probability": injection_probability,
                 "label_probabilities": probs.tolist(),
                 "artifact_dir": str(self._artifact_dir),
+                "calibration_temperature": self._temperature,
             },
         )

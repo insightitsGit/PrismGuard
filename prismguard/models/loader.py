@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from importlib import resources
 from pathlib import Path
@@ -20,6 +21,14 @@ def resolve_artifact_dir(config: GuardModelConfig) -> Path:
     if env_path:
         return Path(env_path).expanduser().resolve()
     return default_artifacts_root() / config.artifact_id
+
+
+def load_corpus_manifest(artifact_dir: Path) -> dict | None:
+    path = artifact_dir / "corpus_manifest.json"
+    if not path.is_file():
+        return None
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return raw if isinstance(raw, dict) else None
 
 
 def load_onnx_classifier(config: GuardModelConfig) -> ONNXPromptInjectionClassifier:

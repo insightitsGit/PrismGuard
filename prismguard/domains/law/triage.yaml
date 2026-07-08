@@ -5,6 +5,7 @@ triage:
 fusion:
   w_clf: 0.35
 guard_model:
+  artifact_id: prism-pi-v2-law
   uncertain_high: 0.55
   veto_threshold: 0.55
 structural:

@@ -1,10 +1,12 @@
-"""CLI for PrismGuard Guard Model artifacts: export, train, corpus stats."""
+"""CLI for PrismGuard Guard Model artifacts: export, train, corpus stats, eval."""
 
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
+
+from prismguard.models.constants import DEFAULT_MAX_LENGTH
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -18,7 +20,7 @@ def main(argv: list[str] | None = None) -> int:
     export_cmd.add_argument("--base-model", default="ProtectAI/deberta-v3-base-prompt-injection")
     export_cmd.add_argument("--artifact-id", default="prism-pi-v1")
     export_cmd.add_argument("--output-dir", default="")
-    export_cmd.add_argument("--max-length", type=int, default=512)
+    export_cmd.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
 
     train_cmd = sub.add_parser("train", help="Fine-tune on seed DB + optional feedback")
     train_cmd.add_argument("--base-model", default="ProtectAI/deberta-v3-base-prompt-injection")
@@ -29,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     train_cmd.add_argument("--epochs", type=int, default=1)
     train_cmd.add_argument("--batch-size", type=int, default=8)
     train_cmd.add_argument("--learning-rate", type=float, default=2e-5)
-    train_cmd.add_argument("--max-length", type=int, default=256)
+    train_cmd.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
     train_cmd.add_argument("--max-train-examples", type=int, default=0)
     train_cmd.add_argument("--feedback-jsonl", action="append", default=[])
     train_cmd.add_argument(
@@ -38,6 +40,13 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="Extra labeled seed YAML (e.g. law overlay). Repeatable.",
     )
+    train_cmd.add_argument("--law-pack", action="store_true")
+    train_cmd.add_argument("--oversample-law", action="store_true")
+    train_cmd.add_argument("--class-weighted", action="store_true")
+    train_cmd.add_argument("--focal-loss", action="store_true")
+    train_cmd.add_argument("--holdout-early-stop", action="store_true")
+    train_cmd.add_argument("--holdout-domain", default="law", choices=["law", "healthcare", "finance"])
+    train_cmd.add_argument("--no-calibration", action="store_true")
     train_cmd.add_argument("--output-dir", default="")
 
     stats_cmd = sub.add_parser("corpus-stats", help="Show training corpus size from seed DB")
@@ -46,6 +55,14 @@ def main(argv: list[str] | None = None) -> int:
     stats_cmd.add_argument("--storage-backend", default="")
     stats_cmd.add_argument("--feedback-jsonl", action="append", default=[])
     stats_cmd.add_argument("--seed-yaml", action="append", default=[])
+    stats_cmd.add_argument("--law-pack", action="store_true")
+    stats_cmd.add_argument("--oversample-law", action="store_true")
+
+    eval_cmd = sub.add_parser("eval", help="Classifier-only holdout metrics (library KPI)")
+    eval_cmd.add_argument("--domain", default="law", choices=["law", "healthcare", "finance"])
+    eval_cmd.add_argument("--artifact-id", default="")
+    eval_cmd.add_argument("--artifact-path", default="")
+    eval_cmd.add_argument("--json", action="store_true")
 
     calibrate_cmd = sub.add_parser("calibrate", help="Holdout-safe fusion/threshold tuning")
     calibrate_cmd.add_argument("--domain", default="law", choices=["law", "healthcare", "finance"])
@@ -87,6 +104,8 @@ def main(argv: list[str] | None = None) -> int:
             str(args.max_length),
             "--max-train-examples",
             str(args.max_train_examples),
+            "--holdout-domain",
+            args.holdout_domain,
         ]
         if args.from_storage:
             train_argv.append("--from-storage")
@@ -96,21 +115,64 @@ def main(argv: list[str] | None = None) -> int:
             train_argv.extend(["--feedback-jsonl", path])
         for path in args.seed_yaml:
             train_argv.extend(["--seed-yaml", path])
+        if args.law_pack:
+            train_argv.append("--law-pack")
+        if args.oversample_law:
+            train_argv.append("--oversample-law")
+        if args.class_weighted:
+            train_argv.append("--class-weighted")
+        if args.focal_loss:
+            train_argv.append("--focal-loss")
+        if args.holdout_early_stop:
+            train_argv.append("--holdout-early-stop")
+        if args.no_calibration:
+            train_argv.append("--no-calibration")
         if args.output_dir:
             train_argv.extend(["--output-dir", args.output_dir])
         return train_main(train_argv)
 
     if args.command == "corpus-stats":
+        from prismguard.models.corpus import default_law_training_paths
         from prismguard.models.train import print_corpus_stats
 
+        feedback_paths = [Path(p) for p in args.feedback_jsonl]
+        seed_yaml_paths = [Path(p) for p in args.seed_yaml]
+        if args.law_pack:
+            law_seed, law_feedback = default_law_training_paths()
+            seed_yaml_paths.extend(law_seed)
+            feedback_paths.extend(law_feedback)
         manifest = print_corpus_stats(
             profile=args.profile,
-            feedback_paths=[Path(p) for p in args.feedback_jsonl],
-            seed_yaml_paths=[Path(p) for p in args.seed_yaml],
+            feedback_paths=feedback_paths,
+            seed_yaml_paths=seed_yaml_paths,
             from_storage=args.from_storage,
             storage_backend=args.storage_backend,
+            oversample_law=args.oversample_law,
         )
         return 0 if manifest.total_examples > 0 else 1
+
+    if args.command == "eval":
+        from prismguard.config.loader import load_triage_config
+        from prismguard.models.eval import evaluate_classifier_from_config
+
+        triage = load_triage_config(domain=args.domain)
+        gm_cfg = triage.guard_model.model_copy()
+        if args.artifact_id:
+            gm_cfg = gm_cfg.model_copy(update={"artifact_id": args.artifact_id})
+        if args.artifact_path:
+            gm_cfg = gm_cfg.model_copy(update={"artifact_path": args.artifact_path})
+        result = evaluate_classifier_from_config(domain=args.domain, config=gm_cfg)  # type: ignore[arg-type]
+        if args.json:
+            print(json.dumps(result.to_dict(), indent=2))
+        else:
+            print(
+                f"domain={result.domain} model={result.model_id} "
+                f"holdout_block={result.holdout_blocked}/{result.holdout_total} "
+                f"({result.holdout_block_rate:.1%}) "
+                f"normal_allow={result.normal_allowed}/{result.normal_total} "
+                f"({result.normal_allow_rate:.1%})"
+            )
+        return 0
 
     if args.command == "calibrate":
         from prismguard.calibration.tune import tune_thresholds, write_tuned_config

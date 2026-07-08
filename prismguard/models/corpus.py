@@ -12,6 +12,7 @@ from typing import Literal
 from prismguard.seed.bundled import BundledProfile
 from prismguard.seed.models import EntrySeed, ParsedSeed
 from prismguard.seed.normalize import normalize_seed_text
+from prismguard.models.constants import THIN_ATTACK_CATEGORIES
 from prismguard.storage.protocols import StorageBackend
 
 TrainingLabel = Literal[0, 1]
@@ -240,6 +241,55 @@ def corpus_manifest(
 def write_corpus_manifest(path: Path, manifest: TrainingCorpusManifest) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest.to_dict(), indent=2), encoding="utf-8")
+
+
+def oversample_thin_categories(
+    examples: list[TrainingExample],
+    *,
+    min_count: int = 80,
+    thin_categories: tuple[str, ...] = THIN_ATTACK_CATEGORIES,
+    seed: int = 42,
+) -> list[TrainingExample]:
+    """Duplicate under-represented attack categories so rare law patterns get more gradient."""
+    import random
+
+    counts: dict[str, int] = {}
+    for example in examples:
+        if example.label != 1 or not example.category_slug:
+            continue
+        counts[example.category_slug] = counts.get(example.category_slug, 0) + 1
+
+    rng = random.Random(seed)
+    extra: list[TrainingExample] = []
+    for category in thin_categories:
+        current = counts.get(category, 0)
+        if current >= min_count:
+            continue
+        pool = [row for row in examples if row.label == 1 and row.category_slug == category]
+        if not pool:
+            continue
+        for _ in range(min_count - current):
+            pick = pool[rng.randrange(len(pool))]
+            extra.append(
+                TrainingExample(
+                    text=pick.text,
+                    label=1,
+                    source=f"{pick.source}+oversample",
+                    category_slug=category,
+                )
+            )
+    return examples + extra
+
+
+def default_law_training_paths() -> tuple[list[Path], list[Path]]:
+    """Law overlay YAML + augment/hard-negative JSONL (never holdout)."""
+    root = Path("benchmark/law/data")
+    seed_yaml = [root / "legal_attacks.yaml"]
+    feedback_jsonl = [
+        root / "law_training_augment.jsonl",
+        root / "law_benign_hard_negatives.jsonl",
+    ]
+    return seed_yaml, [path for path in feedback_jsonl if path.is_file()]
 
 
 def subsample_training_examples(
