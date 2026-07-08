@@ -317,10 +317,38 @@ class RuntimeChecker:
             and self._guard_model is not None
         )
 
-    def _run_classifier_first(self, prompt: str) -> GuardModelVerdict | None:
+    def _start_classifier_async(self, prompt: str) -> Future[GuardModelVerdict] | None:
+        """Start ONNX classifier without blocking (classifier-first mode)."""
         if not self._uses_classifier_first():
             return None
-        return self._guard_model.check(prompt)  # type: ignore[union-attr]
+        return self._classifier_executor.submit(self._guard_model.check, prompt)  # type: ignore[union-attr]
+
+    @staticmethod
+    def _mark_classifier_invoked(details: dict) -> dict:
+        return {**details, "classifier_invoked": True}
+
+    def _attach_optional_classifier_details(
+        self,
+        details: dict,
+        future: Future[GuardModelVerdict] | None,
+        *,
+        await_verdict: bool = False,
+    ) -> dict:
+        if future is None:
+            return details
+        details = self._mark_classifier_invoked(details)
+        if await_verdict or future.done():
+            verdict = future.result()
+            return self._attach_classifier_details(details, verdict)
+        return details
+
+    def _await_classifier_verdict(
+        self,
+        future: Future[GuardModelVerdict] | None,
+    ) -> GuardModelVerdict | None:
+        if future is None:
+            return None
+        return future.result()
 
     def _classifier_first_early_block(self, verdict: GuardModelVerdict) -> CheckResult | None:
         if verdict.decision != "block":
@@ -371,14 +399,7 @@ class RuntimeChecker:
             and self._guard_model is not None
         )
 
-    def _start_parallel_classifier(
-        self,
-        prompt: str,
-        *,
-        first_verdict: GuardModelVerdict | None = None,
-    ) -> Future[GuardModelVerdict] | None:
-        if first_verdict is not None:
-            return None
+    def _start_parallel_classifier(self, prompt: str) -> Future[GuardModelVerdict] | None:
         if not self._uses_parallel_classifier():
             return None
         return self._classifier_executor.submit(self._guard_model.check, prompt)  # type: ignore[union-attr]
@@ -386,14 +407,8 @@ class RuntimeChecker:
     def _collect_classifier_verdict(
         self,
         future: Future[GuardModelVerdict] | None,
-        *,
-        first_verdict: GuardModelVerdict | None = None,
     ) -> GuardModelVerdict | None:
-        if first_verdict is not None:
-            return first_verdict
-        if future is None:
-            return None
-        return future.result()
+        return self._await_classifier_verdict(future)
 
     @staticmethod
     def _classifier_details(verdict: GuardModelVerdict) -> dict:
@@ -603,7 +618,7 @@ class RuntimeChecker:
         )
         session_score = self._session_store.escalation_score(session_id) if session_id else 0.0
 
-        first_verdict = self._run_classifier_first(prompt)
+        classifier_future = self._start_classifier_async(prompt)
 
         tier1 = self._engine.match_tier1(normalized)
         if tier1 is not None:
@@ -613,9 +628,9 @@ class RuntimeChecker:
                 matched_category=tier1.category_slug,
                 matched_rule_id=tier1.rule_id,
                 normalized_prompt=normalized,
-                details=self._attach_classifier_details(
+                details=self._attach_optional_classifier_details(
                     {"severity": tier1.severity},
-                    first_verdict,
+                    classifier_future,
                 ),
             )
 
@@ -630,7 +645,7 @@ class RuntimeChecker:
                 resolution_gate="tenant_context_rule",
                 matched_category="direct_instruction_override",
                 normalized_prompt=normalized,
-                details=self._attach_classifier_details(tenant_block, first_verdict),
+                details=self._attach_optional_classifier_details(tenant_block, classifier_future),
             )
 
         structural = analyze_structural(
@@ -644,39 +659,38 @@ class RuntimeChecker:
                 resolution_gate="structural",
                 matched_category="direct_instruction_override",
                 normalized_prompt=normalized,
-                details=self._attach_classifier_details(
+                details=self._attach_optional_classifier_details(
                     {"structural": structural.details, "matched_pattern": structural.matched_pattern},
-                    first_verdict,
-                ),
-            )
-        first_block_threshold = self._config.guard_model.classifier_first_block_threshold
-        if structural.decision == "allow" and (
-            first_verdict is None
-            or first_verdict.confidence < first_block_threshold
-            or structural.benign_score >= 0.55
-        ):
-            return CheckResult(
-                decision="allow",
-                resolution_gate="structural",
-                matched_category="benign_adjacent",
-                normalized_prompt=normalized,
-                details=self._attach_classifier_details(
-                    {
-                        "structural": structural.details,
-                        "matched_pattern": structural.matched_pattern,
-                        "decision_source": "structural_benign_framing",
-                    },
-                    first_verdict,
+                    classifier_future,
                 ),
             )
 
-        if first_verdict is not None:
+        if structural.decision == "allow":
+            first_verdict = self._await_classifier_verdict(classifier_future)
+            first_block_threshold = self._config.guard_model.classifier_first_block_threshold
+            if (
+                first_verdict is None
+                or first_verdict.confidence < first_block_threshold
+                or structural.benign_score >= 0.55
+            ):
+                return CheckResult(
+                    decision="allow",
+                    resolution_gate="structural",
+                    matched_category="benign_adjacent",
+                    normalized_prompt=normalized,
+                    details=self._attach_classifier_details(
+                        {
+                            "structural": structural.details,
+                            "matched_pattern": structural.matched_pattern,
+                            "decision_source": "structural_benign_framing",
+                        },
+                        first_verdict,
+                    ),
+                )
             early = self._classifier_first_early_block(first_verdict)
             if early is not None:
                 early.normalized_prompt = normalized
                 return early
-
-        if structural.decision == "allow":
             if (
                 first_verdict is not None
                 and first_verdict.decision == "uncertain"
@@ -715,7 +729,15 @@ class RuntimeChecker:
                 ),
             )
 
-        classifier_future = self._start_parallel_classifier(prompt, first_verdict=first_verdict)
+        if classifier_future is None:
+            classifier_future = self._start_parallel_classifier(prompt)
+
+        first_verdict = self._await_classifier_verdict(classifier_future)
+        if first_verdict is not None:
+            early = self._classifier_first_early_block(first_verdict)
+            if early is not None:
+                early.normalized_prompt = normalized
+                return early
 
         semantic = self._embedder.embed_semantic(normalized)
         slug = self._engine.assign_category(normalized)
@@ -828,7 +850,7 @@ class RuntimeChecker:
                 ),
             )
 
-        classifier_verdict = self._collect_classifier_verdict(classifier_future, first_verdict=first_verdict)
+        classifier_verdict = first_verdict
         classifier_prob = self._fusion_classifier_prob(classifier_verdict)
 
         fusion = fuse_signals(

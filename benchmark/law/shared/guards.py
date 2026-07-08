@@ -19,7 +19,7 @@ def _outcome_from_check_result(result, *, elapsed: float, name: str) -> GuardOut
     classifier_calls = 0
     if result.resolution_gate in ("guard_model", "guard_model_first", "guard_model_veto"):
         classifier_calls = 1
-    elif result.details.get("classifier_fused"):
+    elif result.details.get("classifier_fused") or result.details.get("classifier_invoked"):
         classifier_calls = 1
     generative_calls = 1 if result.resolution_gate == "llm_judge" else 0
     if result.resolution_gate == "guard_model":
@@ -30,7 +30,7 @@ def _outcome_from_check_result(result, *, elapsed: float, name: str) -> GuardOut
         tier = "classifier_parallel_fusion"
     elif result.resolution_gate == "llm_judge":
         tier = "generative_judge"
-    elif result.details.get("classifier_fused"):
+    elif result.details.get("classifier_fused") or result.details.get("classifier_invoked"):
         tier = "classifier_parallel_fusion"
     elif result.resolution_gate in ("fusion_gray_fail_closed", "fusion_gray_fail_open"):
         tier = "policy_resolved"

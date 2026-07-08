@@ -1,6 +1,6 @@
 # PrismGuard — Design Document
 
-Status: draft v0.3 (updated 2026-07-08 — domain packs, tenant context, calibration, output scan, law benchmark harness)
+Status: draft v0.4 (updated 2026-07-08 — classifier-first default, structural layer, benchmark metrics aligned to code)
 Depends on: prismRAG (taxonomy graph retrieval), prismCortex (pgvector seed store), prismLib (in-process cache/runtime)
 Owner note: this document captures the architecture agreed in design discussion; benchmark metrics in Part 12 are measured on the law harness — production traffic targets in Part 1 remain hypotheses.
 
@@ -10,7 +10,7 @@ Owner note: this document captures the architecture agreed in design discussion;
 
 ## Part 0 — One-line summary
 
-**PrismGuard is a self-hosted, audit-traceable prompt-injection firewall.** It sits in front of an LLM call, classifies incoming prompts against a taxonomy-aware forbidden-pattern corpus (via prismRAG), and escalates only genuinely ambiguous cases to a cheap local classifier and, rarely, a real LLM call — with every decision traceable to a specific rule and category.
+**PrismGuard is a self-hosted, audit-traceable prompt-injection firewall.** It sits in front of an LLM call, runs rules + an owned ONNX classifier on **every** request, layers taxonomy-aware corpus fusion (prismRAG) for ambiguous cases, and escalates only rarely to a real LLM Judge — with every decision traceable to a specific rule, gate, and category.
 
 ---
 
@@ -18,7 +18,7 @@ Owner note: this document captures the architecture agreed in design discussion;
 
 ### Primary design goal
 
-**Minimize LLM calls per request while maximizing structural (non-LLM) coverage.** Every architectural decision below is in service of this: push as much detection as possible into deterministic rules and taxonomy-aware vector/graph matching (prismRAG + prismCortex), and treat the LLM Judge as an expensive, rare fallback — not the primary detector.
+**Run rules + classifier on every request; gate only the generative LLM Judge.** Every architectural decision below is in service of this: the ONNX classifier is always-on (like LLM Guard's scanners or LlamaFirewall's PromptGuard pass) because skipping it based on how a request "looks" is itself a security judgment. What is selectively invoked is the **LLM Judge** — the only genuinely expensive tier.
 
 ### Secondary goals
 
@@ -33,16 +33,17 @@ Owner note: this document captures the architecture agreed in design discussion;
 - Not a guarantee against zero-day/never-before-seen attack techniques — see [Part 9](#part-9--open-risks--what-this-doc-does-not-prove).
 - Not a hosted SaaS classification API (at least not for v1) — runs in the customer's own infrastructure as an **in-process library** (`RuntimeChecker`). A future optional HTTP wrapper is not planned for current scope. **Default backend is Postgres + pgvector**, but the seed corpus and ANN layer are designed to be **swappable** (Chroma, Pinecone, Weaviate) via a `StorageBackend` facade — see Part 4 and the implementation handoff Part J.
 
-### Target metrics (to validate, not yet measured)
+### Target metrics (measured on law harness — see Part 12)
 
-| Stage | Target share of traffic | Cost per request |
+| Stage | What runs | Target / measured |
 |---|---|---|
-| Resolved by Tier-1 rule hit alone | majority of clearly-bad traffic | ~0 (regex/keyword) |
-| Resolved by category-grounded similarity + graph expansion | most of the remainder | single-digit ms (vector ANN; pgvector default) |
-| Lands in gray zone → Guard Model | small minority (target: low single-digit %) | small local model inference |
-| Guard Model uncertain → LLM Judge | rare (target: well under 1% of total traffic) | one real LLM call |
+| ONNX classifier (`classifier_mode: first`) | **100% of traffic** (synchronous, before Tier-1) | `guard_classifier_calls_mean ≈ 1.0` |
+| Tier-1 / structural / corpus fusion | Remaining path after classifier-first early block | Majority of decisions; auditable gates |
+| Fusion gray → reuse classifier verdict | No second classifier call | Reuses first-pass verdict |
+| LLM Judge | **Gated** — fusion/classifier uncertain + `gray_zone_policy: escalate` | Target: low single-digit %; law CPL ~7% |
+| Generative LLM calls | Judge only | `guard_generative_llm_calls_mean` ≈ judge rate |
 
-These targets are hypotheses. They must be measured against a real eval set once built (see Part 8).
+**Cost philosophy:** nobody in this field gates their classifier on request ambiguity; they gate generative LLM calls. PrismGuard follows the same pattern.
 
 ---
 
@@ -54,7 +55,7 @@ These targets are hypotheses. They must be measured against a real eval set once
 | **prismRAG** | Taxonomy-aware graph retrieval: categories, Tier-1 rules, dual vectors, Louvain communities, bridges, graph BFS expansion, append mode | Reused |
 | **prismLib** | In-process runtime cache; warm-loads the corpus at server startup; hosts the request-time check | Reused |
 | **prismLib Runtime Check** | The request-time pipeline: normalize → rule check → category similarity → graph expansion → triage | **New** |
-| **Guard Model tier** | Prism-owned ONNX prompt-injection classifier (`prismguard/models/`); **parallel fusion (Option A)** by default; gray-only cascade legacy | **Implemented** |
+| **Guard Model tier** | Prism-owned ONNX prompt-injection classifier (`prismguard/models/`); **classifier-first (Option B) default** in shipped `triage.yaml`; parallel fusion (Option A) and gray-only cascade (legacy) also supported | **Implemented** |
 | **Guard Model training** | Seed DB → fine-tune → ONNX artifact; repeatable via `prismguard-model train` | **Implemented** |
 | **Calibration** | Holdout-safe grid search over fusion/thresholds; `prismguard-model calibrate` | **Implemented** |
 | **Tenant context** | Optional lexicon (file/SQL); Tier-1 blocks + fusion severity boost | **Implemented** (opt-in) |
@@ -70,61 +71,57 @@ PrismGuard itself contributes the runtime check, the two-tier escalation, the ow
 
 ## Part 3 — Architecture (request-time flow)
 
+**Default mode:** `classifier_mode: first` (`prismguard/config/triage.yaml`). Pydantic fallbacks in `loader.py` default to `parallel` if no YAML is loaded (tests); production and benchmarks load YAML.
+
 ```
 Incoming Prompt
   │
   ▼
-Normalize                 unicode NFKC, decode common obfuscation (base64/hex/rot13),
-                           strip zero-width/homoglyph chars, lowercase
+Normalize                 unicode NFKC, decode obfuscation, strip zero-width/homoglyphs
   │
   ▼
-Tier-1 Rule Check          keyword/regex pass against prismRAG mapping table (near-zero cost)
-  │  high-severity match ──────────────────────────────────► BLOCK (tier1_rule)
+Guard Model (first pass)   ONNX classifier on 100% of traffic (synchronous)
+  │                          high-confidence block (≥ classifier_first_block_threshold)
+  │                          ─────────────────────────────────► BLOCK (guard_model_first)
   ▼
-Tenant Context (opt-in)    override language + restricted entity → BLOCK (tenant_context_rule)
-  │                          override + entity → skip benign fast-path; force gray escalation
+Tier-1 Rule Check          keyword/regex against prismRAG mapping table
+  │  match ─────────────────────────────────────────────────► BLOCK (tier1_rule)
   ▼
-Parallel Guard Model       ONNX classifier in background thread (classifier_mode: parallel)
-  │                          verdict reused for fusion (w_clf) and gray escalation
+Tenant Context (opt-in)    override language + restricted entity
+  │  match ─────────────────────────────────────────────────► BLOCK (tenant_context_rule)
   ▼
-Chunk + Dual-Vector Embed  768-d semantic + 256-d category-grounded vector
-  │
+Structural Heuristics      regex scoring: override / roleplay / refusal / encoding / exfil
+  │  attack_score ≥ block_threshold ─────────────────────────► BLOCK (structural)
+  │  benign framing (high benign_score) ─────────────────────► ALLOW (structural)
   ▼
-Community Routing + ANN    attack + benign_adjacent + category-grounded ANN (memory or pgvector)
-  │
+Classifier early block     reuse first-pass verdict if confidence ≥ threshold
+  │                          (skipped if structural already allowed benign)
+  │  ───────────────────────────────────────────────────────► BLOCK (guard_model_first)
   ▼
-Benign Fast-Path           contrastive margin allow (skipped on tenant override + entity)
-  │  corpus match >= threshold ───────────────────────────► BLOCK (corpus_match)
+Structural allow + veto    structural allow may flip to block if classifier ≥ veto_threshold
+  │                          uncertain classifier on structural allow → gray escalation
   ▼
-Graph BFS + Louvain        word-graph connectivity + community confidence
-  │
+Embed + ANN + Fusion       semantic + category vectors, corpus ANN, graph/Louvain, fuse_signals
+  │                          (parallel classifier thread only when mode=parallel and no first_verdict)
+  │  benign fast-path ─────────────────────────────────────► ALLOW (benign_fast_path)
+  │  corpus match ─────────────────────────────────────────► BLOCK (corpus_match)
+  │  fusion block/allow ───────────────────────────────────► BLOCK/ALLOW (fusion_*)
+  │  fusion gray
+  │     ├── fail_open / fail_closed ───────────────────────► ALLOW/BLOCK (policy gate)
+  │     └── escalate → reuse classifier verdict
+  │           ├── block / allow ───────────────────────────► (guard_model)
+  │           └── uncertain + Judge configured ────────────► (llm_judge)
   ▼
-Score Aggregation          fuse_signals (w_sim, w_graph, w_rule, w_sev, w_comm, w_clf, w_benign)
-  │                          + tenant severity boost on restricted entities
-  ▼
-Triage Split               per-category block/allow thresholds → block | allow | gray
-  │
-  ├── block ───────────────────────────────────────────────► BLOCK (fusion_block)
-  ├── allow ──► Classifier Veto? ──────────────────────────► BLOCK (guard_model_veto) or ALLOW
-  └── gray
-        │
-        ├── gray_zone_policy: fail_open / fail_closed ─────► ALLOW / BLOCK (policy gate)
-        └── gray_zone_policy: escalate
-              │
-              ▼
-            Guard Model (reuse parallel verdict, or gray_only cascade)
-              │
-              ├── block / allow ───────────────────────────► Final Decision (guard_model)
-              └── uncertain + LLM Judge configured ────────► Final Decision (llm_judge)
+Classifier Veto              fusion/structural allow + confidence ≥ veto_threshold → block
   │
   ▼
 Feedback                   confirmed blocks → review queue; near-miss allows → calibration
   │
   ▼
-[Agent path only] Output Scan   post-generation exfil patterns on model answer (output_scan gate)
+[Agent path only] Output Scan   post-generation exfil patterns (output_scan gate)
 ```
 
-**Resolution gates** (audit surface): `tier1_rule`, `tenant_context_rule`, `corpus_match`, `benign_fast_path`, `fusion_block`, `fusion_allow`, `fusion_gray`, `fusion_gray_fail_open`, `fusion_gray_fail_closed`, `guard_model`, `guard_model_veto`, `llm_judge`, `output_scan`.
+**Resolution gates** (audit surface): `guard_model_first`, `tier1_rule`, `tenant_context_rule`, `structural`, `corpus_match`, `benign_fast_path`, `fusion_block`, `fusion_allow`, `fusion_gray`, `fusion_gray_fail_open`, `fusion_gray_fail_closed`, `guard_model`, `guard_model_veto`, `llm_judge`, `output_scan`.
 
 **Library vs agent integration:** `RuntimeChecker.check()` covers input-side gates only. Output-side scanning lives in `prismguard/runtime/output_scan.py` and is wired into the **law benchmark agent pipelines** (`benchmark/law/shared/assistant.py`); integrators call `scan_output()` on model responses in their own agent wrapper. There is **no** planned HTTP classification service — embed the library in-process.
 
@@ -278,36 +275,44 @@ High-severity rule hits can short-circuit straight to BLOCK without needing the 
 
 ## Part 7 — Escalation tiers (cost control)
 
+### Positioning vs the field
+
+| Product | What runs on every request | What's gated/optional | Why |
+|---|---|---|---|
+| **LLM Guard** | All configured scanners (classifiers) | Which scanners you enable at deploy time | Threat model chosen upfront; no per-request "skip classifier" decision |
+| **NeMo Guardrails** | Configured input/output rails on every message | Individual rails may call an LLM for classification | Middleware pipeline always runs; expensive LLM sub-calls are author-controlled |
+| **LlamaFirewall** | Fast heuristic scan, then PromptGuard 2 on survivors | Classifier not skipped by ambiguity — heuristics are a first pass | Small model (86M/22M) kept cheap enough to always run |
+| **Rebuff** | Heuristics + vector similarity | LLM-based check is optional/toggleable | Gate the genuinely expensive thing (real LLM call) |
+| **PrismGuard** | Rules + structural heuristics + ONNX classifier | **Only the LLM Judge** (rare generative call) | Same pattern as the field: classifier always on; generative LLM gated |
+
 ### Guard Model (Prism-owned ONNX classifier)
 
 PrismGuard ships an **owned** Guard Model stack under `prismguard/models/` — not a wrapper around LLM Guard or another vendor library.
 
-**Option B (default): classifier-first** — the classifier runs synchronously on **100%** of traffic immediately after normalization, before Tier-1 and fusion short-circuits. High-confidence blocks (`confidence ≥ uncertain_high`) exit at `guard_model_first`. All other paths continue through Tier-1, structural, embed/ANN/fusion. When fusion would `allow` but the first-pass classifier is `uncertain`, the request escalates through the Bug3 gray → Guard Model → Judge chain (reusing the first verdict, no second classifier call). Veto still flips fusion allows when classifier confidence ≥ `veto_threshold`.
+**Option B (default in shipped `triage.yaml`): classifier-first** — the classifier runs synchronously on **100%** of traffic immediately after normalization (`_run_classifier_first` in `check.py`), before Tier-1, structural, and fusion. High-confidence blocks exit at `guard_model_first` when `confidence ≥ classifier_first_block_threshold` (default 0.85; law domain 0.88) — **not** `uncertain_high`. All other paths continue through Tier-1, structural, embed/ANN/fusion. Gray escalation reuses the first-pass verdict (no second classifier call). Veto flips structural/fusion allows when classifier confidence ≥ `veto_threshold`.
 
-**Option A: parallel fusion** — the classifier runs in a background thread while the embed/ANN/graph path executes. Its injection probability is fused via `w_clf` before block/allow/gray routing. Short-circuits skip the classifier: tier1, benign fast path, corpus match. Gray escalation reuses the parallel verdict (no second classifier call); Judge runs only if the classifier was uncertain.
+**Option A: parallel fusion** (`classifier_mode: parallel`) — classifier runs in a background thread while embed/ANN/graph executes; injection probability fused via `w_clf`. Tier-1, tenant block, structural benign allow, benign fast-path, and corpus match can short-circuit before fusion collects the parallel verdict.
 
-**Legacy: `classifier_mode: gray_only`** — classifier runs only on fusion gray (Bug3 cascade).
+**Legacy: `classifier_mode: gray_only`** — classifier runs only on fusion gray (Bug3 cascade). Used when no guard model artifact is available (runtime degrades from `first`/`parallel` to `gray_only` automatically).
 
 | Component | Path | Role |
 |-----------|------|------|
 | Protocol + wiring | `prismguard/runtime/guard_model.py` | `GuardModel` interface; `PrismONNXGuardModel`; invoked from `RuntimeChecker` |
 | Inference | `prismguard/models/onnx_classifier.py` | ONNX Runtime session; injection probability |
+| Structural | `prismguard/runtime/structural.py` | Regex scoring for override/roleplay/refusal/encoding; law-education benign patterns |
 | Artifacts | `prismguard/models/artifacts/<artifact_id>/` | `model.onnx`, `tokenizer.json`, `model_card.yaml`, `corpus_manifest.json`, `train_metrics.json` |
 | Training | `prismguard/models/train.py`, `corpus.py` | Build labeled corpus from seed DB; fine-tune; export ONNX |
-| CLI | `prismguard-model` | `corpus-stats`, `train`, `export`, `calibrate` |
+| CLI | `prismguard-model` | `corpus-stats`, `train`, `export`, `calibrate`, `eval` |
 
-**Parallel fusion (Option A, default):** classifier starts after Tier-1/tenant checks in a thread pool; injection probability enters `fuse_signals` via `w_clf`. Short-circuits skip classifier work: Tier-1 block, tenant block, benign fast-path, corpus match.
-
-**Classifier veto:** when fusion routes `allow` but classifier confidence ≥ `veto_threshold` (default 0.65), decision flips to `block` with gate `guard_model_veto`.
-
-**Legacy `classifier_mode: gray_only`:** classifier runs only on fusion gray (Bug3 cascade); no parallel fusion or veto on allow path.
+**Classifier veto:** when fusion or structural routes `allow` but classifier confidence ≥ `veto_threshold`, decision flips to `block` with gate `guard_model_veto`. Below veto threshold, gray-zone classifier uncertainty can route to Judge instead of vetoing.
 
 **Runtime contract** (`GuardModel.check` → `GuardModelVerdict`):
 
 - `decision`: `block` | `allow` | `uncertain`
 - `confidence`: injection probability (0–1)
 - `model_id`: artifact id (default `prism-pi-v1`)
-- Only runs when `gray_zone_policy: escalate` and fusion lands in gray band
+- In `first`/`parallel` modes: invoked on every request (when `guard_model.enabled` and artifact present)
+- In `gray_only` mode: invoked only when fusion lands in gray and `gray_zone_policy: escalate`
 
 **Configuration** (`prismguard/config/triage.yaml`):
 
@@ -315,14 +320,18 @@ PrismGuard ships an **owned** Guard Model stack under `prismguard/models/` — n
 gray_zone_policy: escalate
 guard_model:
   enabled: true
-  classifier_mode: first  # first (Option B) | parallel (Option A) | gray_only (legacy)
+  classifier_mode: first  # first (Option B, default) | parallel (Option A) | gray_only (legacy)
   artifact_id: prism-pi-v1
   uncertain_low: 0.35
   uncertain_high: 0.65
   veto_enabled: true
-  veto_threshold: 0.65
+  veto_threshold: 0.65        # law domain override: 0.82
+  classifier_first_block_threshold: 0.85  # law domain override: 0.88
+structural:
+  structural_block_threshold: 0.85
+  structural_allow_threshold: 0.20
 fusion:
-  w_clf: 0.30  # classifier injection probability weight in parallel fusion
+  w_clf: 0.30  # used in parallel fusion and fusion scoring when classifier_prob present
 tenant_context:
   enabled: false  # opt-in; see Part 10
 embedding:
@@ -333,9 +342,10 @@ embedding:
 
 See `docs/guard-model-training.md` for the full training and retraining loop.
 
-### LLM Judge
+### LLM Judge (the only gated expensive tier)
 
 - Isolated, stateless call. No tool access, no conversation memory, no privileged context — a wrong verdict here produces a wrong classification, never a compromised action.
+- Invoked when fusion/classifier lands in gray, classifier verdict is `uncertain`, and `gray_zone_policy: escalate`.
 - Forced structured output (schema/function-call), not freeform text, to reduce the judge's own susceptibility to injection.
 - Input includes matched examples and category/severity context so the judge isn't reasoning from nothing.
 - Rate-capped with a circuit breaker: if judge call volume spikes (e.g., an adversarial probing campaign deliberately targeting the gray zone), fail closed (block) rather than let cost scale linearly with an attack.
@@ -349,7 +359,7 @@ PrismGuard has **two complementary learning paths**:
 
 | Path | What improves | How data flows |
 |------|---------------|----------------|
-| **Structural** (Tier-1 / fusion / graph) | Fewer gray escalations; better category routing | Reviewed blocks → `prismguard-seed import` → prismCortex + prismRAG |
+| **Structural** (Tier-1 / structural / fusion / graph) | Fewer judge escalations; better category routing | Reviewed blocks → `prismguard-seed import` → prismCortex + prismRAG |
 | **Neural** (Guard Model) | Better decisions on ambiguous text | Seed DB + reviewed feedback → `prismguard-model train` → new ONNX artifact |
 
 ### Runtime feedback
@@ -489,7 +499,47 @@ Factorial design isolates **agent framework** vs **input guardrail**:
 
 **Overlap integrity:** `benchmark/law/shared/seed_overlap.py` verifies holdout prompts do not collide with seeded overlay or bundled corpus.
 
-**Docker:** `benchmark/law/docker-compose.yml` bakes ONNX artifact for CPL/LPL via `prismguard-model train` (`MAX_TRAIN_EXAMPLES` configurable).
+**Docker:** `benchmark/law/docker-compose.yml` bakes ONNX artifact for CPL/LPL via `prismguard-model train` (`MAX_TRAIN_EXAMPLES` configurable). Set `PRISMGUARD_DOMAIN=law` for domain triage overrides.
+
+### Latest law benchmark (2026-07-08, full 4-stack re-run)
+
+| Stack | Holdout block | Normal pass | Blended latency | Judge rate |
+|-------|---------------|-------------|-----------------|------------|
+| **CPL** (PrismGuard) | **85.7%** (12/14) | **100%** (35/35) | ~1,255 ms | ~6.9% |
+| **CGL** (LLM Guard) | 64.3% (9/14) | 100% | ~254 ms | 0% |
+| **LPL** (PrismGuard) | **85.7%** | **100%** | ~1,018 ms | ~6.9% |
+| **LGL** (LLM Guard) | 64.3% | 100% | ~291 ms | 0% |
+
+PrismGuard leads on holdout detection with tied normal pass; LLM Guard is ~4–5× faster on blended latency.
+
+### Cost / latency reporting
+
+**Blended latency** (`compare_law.py`) estimates typical per-request cost when tiers differ:
+
+```
+blended_latency_ms = fast_path_share × fast_path_mean
+                   + guard_model_share × guard_model_mean
+                   + judge_share × judge_mean
+```
+
+Where `fast_path` = any gate other than `guard_model`, `guard_model_veto`, `llm_judge`.
+
+**Important:** this metric predates classifier-first and can mislead:
+
+- `guard_model_escalation_rate` counts fusion-gray re-escalations, **not** whether the classifier ran — in `classifier_mode: first`, the classifier runs on ~100% of requests regardless.
+- `guard_model_first` (early classifier block) counts as fast path but still paid full ONNX inference.
+- The honest comparison vs LLM Guard is: **always-on base pipeline** (rules + embed + corpus + classifier ≈ 1,000–1,100 ms on CPU Docker) plus a **small judge surcharge** (~7% × ~900 ms), not "classifier escalation."
+
+**Target reporting (to align with design):**
+
+| Metric | Meaning |
+|--------|---------|
+| `base_pipeline_latency_ms` | Mean latency excluding `llm_judge` (always-on stack) |
+| `judge_escalation_rate` | Share hitting generative judge — the only gated expensive tier |
+| `classifier_calls_mean` | Should be ~1.0 for PrismGuard (parity with LLM Guard's one scanner) |
+| `blended_latency_ms` | `base_pipeline + judge_rate × judge_surcharge` (planned metric reframe) |
+
+See `benchmark/law/results/latest/COMPARISON_REPORT.md` for full paired deltas.
 
 ---
 
@@ -499,7 +549,7 @@ Factorial design isolates **agent framework** vs **input guardrail**:
 |-------|--------|--------|
 | **Phase 0** | Taxonomy + seed corpus v0 | **Done** — bundled `full` profile (~22k labeled rows) |
 | **Phase 1** | Runtime check (rules + dual vector + graph + fusion) | **Done** — `prismguard/runtime/check.py` |
-| **Phase 2** | Guard Model tier (owned ONNX classifier) | **Done** — `prism-pi-v1`; parallel fusion + veto |
+| **Phase 2** | Guard Model tier (owned ONNX classifier) | **Done** — `prism-pi-v1`; classifier-first default + parallel fusion + veto |
 | **Phase 3** | LLM Judge + feedback loop | **Done** — heuristic judge; persistent feedback opt-in |
 | **Phase 4** | Output-side exfil scan | **Done** (library + benchmark wiring) |
 | **Phase 5** | Domain packs + holdout eval | **Done** — law / healthcare / finance |
@@ -507,11 +557,12 @@ Factorial design isolates **agent framework** vs **input guardrail**:
 | **Phase 7** | Holdout-safe calibration | **Done** — `prismguard-model calibrate` |
 | **Phase 8** | Law benchmark harness (4 stacks) | **Done** — CPL/CGL/LGL/LPL |
 | **Phase 9** | pgvector / persistent storage backend | **Open** |
-| **Phase 10** | Structural/session layers (handoff Part I.4) | **Open** |
-| **Phase 11** | User validation + packaging | **Open** |
+| **Phase 10** | Structural heuristics layer | **Done** — `prismguard/runtime/structural.py`; law-education benign patterns |
+| **Phase 11** | Session / multi-turn fusion | **Open** — `session_id` logged; `w_session` wired in fusion but limited |
+| **Phase 12** | User validation + packaging | **Open** |
 | *(future)* | HTTP classification service (`prismguard serve`) | **Deferred** — not in current scope |
 
-Ongoing: full 22k retrain (`--max-train-examples 0`); Docker rebuild + benchmark rerun after code changes; per-domain threshold tuning from holdout metrics.
+Ongoing: ONNX latency optimization (GPU, async, smaller embedder); full 22k retrain; benchmark metric reframe for base-pipeline vs judge surcharge.
 
 ---
 
@@ -520,13 +571,15 @@ Ongoing: full 22k retrain (`--max-train-examples 0`); Docker rebuild + benchmark
 ### Implemented and working
 
 - Full input-side runtime pipeline with auditable resolution gates
-- Owned ONNX Guard Model with train/export/calibrate CLI
-- Parallel fusion, classifier veto, gray policies, LLM Judge (heuristic + optional OpenAI)
+- **Classifier-first default** (`classifier_mode: first` in shipped `triage.yaml`); parallel and gray_only modes
+- **Structural heuristics** (`structural` gate) with domain-tunable thresholds and law-education benign patterns
+- Owned ONNX Guard Model with train/export/calibrate/eval CLI
+- Classifier veto, gray policies, LLM Judge (heuristic + optional OpenAI)
 - Seed import (multi-format, bundled corpus, domain overlays)
 - Taxonomy engine + word graph + Louvain (graceful degradation without prismRAG graph)
 - Feedback review queue + calibration near-misses + optional JSON persistence
 - Tenant context (opt-in lexicon, Tier-1 + fusion boost)
-- Domain packs with holdout-safe eval sets
+- Domain packs with holdout-safe eval sets (law holdout: **85.7% block, 100% normal pass** vs LLM Guard 64.3% / 100%)
 - Output-side scan (benchmark agent path)
 - Law benchmark harness with comparison reports and overlap checks
 - Embedder: sentence-transformers when available, **HashEmbedder fallback** offline
@@ -537,8 +590,7 @@ Ongoing: full 22k retrain (`--max-train-examples 0`); Docker rebuild + benchmark
 |-----|--------|-------|
 | **pgvector / Chroma / Pinecone / Weaviate backends** | Cannot deploy persistent corpus today | `storage/backends/*` raise `NotImplementedError`; all benchmarks use `memory` |
 | **No HTTP classification service** | Integrators embed `RuntimeChecker` directly (by design for v1) | Benchmark FastAPI stacks are eval-only, not a product API |
-| **Structural heuristics layer** | Handoff Part I.4 not built | `structural` keys in config unused |
-| **Session / multi-turn fusion** | `session_id` logged only; `w_session` unused | `session-redis` extra exists but unwired |
+| **Session / multi-turn fusion** | `session_id` logged; escalation score in fusion but no Redis wiring | `session-redis` extra exists but unwired |
 | **Output scan not in `check()`** | Agent integrators must wire post-generation hook | By design for now |
 | **Runtime decision cache** | Every request full pipeline | `cache` config only used for LLM Judge semantic cache |
 | **prismLib warm-load at startup** | Design describes server warm-load | Implementation uses `RuntimeChecker.from_storage()` per process |
@@ -547,28 +599,30 @@ Ongoing: full 22k retrain (`--max-train-examples 0`); Docker rebuild + benchmark
 
 | Gap | Impact | Notes |
 |-----|--------|-------|
-| **Holdout block rate vs LLM Guard** | PrismGuard holdout exfil attacks still partially missed | Latest Docker run ~50% holdout block (CPL/LPL) vs CGL ~64% |
+| **Base pipeline latency vs LLM Guard** | PrismGuard ~4–5× slower on CPU Docker | Heavier always-on stack: DeBERTa ONNX + sentence-transformer + corpus ANN vs one lightweight scanner; judge is only ~7% of cost |
+| **Holdout not 100%** | 2/14 law holdout attacks still slip through | 85.7% vs LLM Guard 64.3% — ahead but not perfect |
+| **Blended latency metric** | `compare_law.py` treats fusion-gray as "classifier escalation" | Misaligned with classifier-first; reframe to base-pipeline + judge surcharge (see Part 12) |
 | **LLM Judge in benchmarks** | Judge metrics reflect heuristics unless OpenAI configured | `prefer_openai=False` in benchmark guards |
-| **Stale Docker images** | Local `law-lfl` image predates LGL rename | Rebuild required: `docker compose up --build` |
-| **Full corpus retrain** | Current artifact trained on 8k stratified sample | CLI supports full 22k; not run by default (CPU/time) |
+| **Full corpus retrain** | Docker bake uses stratified sample by default | CLI supports full 22k; `prism-pi-v1` re-exported from HF 22k weights |
 | **Windows pyarrow crash** | Some bundled-seed tests fail on Windows | Environment issue reading parquet corpus |
 
 ### Gaps — config & consistency
 
 | Gap | Impact | Notes |
 |-----|--------|-------|
-| **Pydantic defaults vs shipped yaml** | Code defaults differ from `triage.yaml` | YAML wins at load; document or align |
+| **Pydantic defaults vs shipped yaml** | Code defaults `classifier_mode: parallel`; yaml ships `first` | YAML wins at `load_triage_config()`; document or align pydantic default |
 | **Domain triage merge is shallow** | Nested keys outside listed sections not merged | By design; document clearly |
 | **Neuralchemy parquet** | Not bundled | Placeholder README only |
 
 ### Recommended next work (priority order)
 
 1. **Implement pgvector backend** — unlocks persistent production deploy
-2. **Rebuild Docker stacks + rerun law benchmark** — validate LGL + parallel fusion metrics
-3. **Full 22k classifier retrain** — improve holdout block rate
-4. **Structural layer** — encoding/payload-splitting heuristics from handoff
-5. **Session fusion** — multi-turn escalation detection
+2. **Reframe benchmark latency metrics** — base-pipeline + judge surcharge (Part 12)
+3. **ONNX latency optimization** — GPU inference, async classifier, embedder cache
+4. **Full 22k classifier retrain / v2-law** — reduce structural reliance; close 2/14 holdout misses
+5. **Session fusion** — multi-turn escalation detection with Redis
 6. **Wire output scan into agent SDK helper** — e.g. `RuntimeChecker.scan_response()` (library, not HTTP)
+7. **Align pydantic default** — `classifier_mode: first` in `loader.py` to match shipped yaml
 
 **Explicitly deferred (future, if ever):** a hosted `prismguard serve` HTTP API (`POST /check`, `POST /scan-output`) — not planned for current scope; customers integrate the Python library in-process.
 
