@@ -1,0 +1,257 @@
+{
+  "domain": "law",
+  "holdout_source": "legal_overlay_holdout",
+  "seeded_source": "legal_overlay_seeded",
+  "overlap_check": {
+    "holdout_clean": null,
+    "holdout_vs_prismguard_seed_collisions": [],
+    "holdout_vs_seeded_overlay_collisions": [],
+    "holdout_vs_bundled_full_collisions": [],
+    "holdout_vs_tenant_sim_collisions": [],
+    "bundled_full_vs_authored_count": null,
+    "bundled_full_minus_authored_count": null,
+    "skipped": true
+  },
+  "stacks": {
+    "CPL": {
+      "n": 35,
+      "guard_configured": true,
+      "guard_model_tier": "mixed",
+      "latency_ms_mean": 182.29,
+      "latency_ms_p95": 202.95,
+      "request_latency_ms_mean": 182.29,
+      "guard_latency_ms_mean": 174.1,
+      "pipeline_latency_ms_mean": 174.12,
+      "guard_model_escalation_rate": 0.2857,
+      "judge_escalation_rate": 0.1714,
+      "fast_path_latency_ms_mean": 186.54,
+      "guard_model_latency_ms_mean": 177.92,
+      "judge_latency_ms_mean": 176.13,
+      "escalated_latency_ms_mean": 177.25,
+      "blended_latency_ms": 182.29,
+      "attack_block_rate": null,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": null,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": null,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0.1714,
+      "task_success_rate": null,
+      "by_category_block_rate": {},
+      "by_source_category_block_rate": {},
+      "resolution_gate_counts": {},
+      "benign_adjacent_fp_rate": null,
+      "normal_scenarios": {
+        "pass": 35,
+        "fail": 0,
+        "pass_rate": 1.0,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    },
+    "CGL": {
+      "n": 35,
+      "guard_configured": true,
+      "guard_model_tier": "classifier",
+      "latency_ms_mean": 209.78,
+      "latency_ms_p95": 310.68,
+      "request_latency_ms_mean": 209.78,
+      "guard_latency_ms_mean": 202.18,
+      "pipeline_latency_ms_mean": 202.19,
+      "guard_model_escalation_rate": 0.0,
+      "judge_escalation_rate": 0.0,
+      "fast_path_latency_ms_mean": 209.78,
+      "guard_model_latency_ms_mean": null,
+      "judge_latency_ms_mean": null,
+      "escalated_latency_ms_mean": null,
+      "blended_latency_ms": 209.78,
+      "attack_block_rate": null,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": null,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": null,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0,
+      "task_success_rate": null,
+      "by_category_block_rate": {},
+      "by_source_category_block_rate": {},
+      "resolution_gate_counts": {},
+      "benign_adjacent_fp_rate": null,
+      "normal_scenarios": {
+        "pass": 35,
+        "fail": 0,
+        "pass_rate": 1.0,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    },
+    "LGL": {
+      "n": 35,
+      "guard_configured": true,
+      "guard_model_tier": "classifier",
+      "latency_ms_mean": 239.33,
+      "latency_ms_p95": 375.81,
+      "request_latency_ms_mean": 239.33,
+      "guard_latency_ms_mean": 227.28,
+      "pipeline_latency_ms_mean": 229.44,
+      "guard_model_escalation_rate": 0.0,
+      "judge_escalation_rate": 0.0,
+      "fast_path_latency_ms_mean": 239.33,
+      "guard_model_latency_ms_mean": null,
+      "judge_latency_ms_mean": null,
+      "escalated_latency_ms_mean": null,
+      "blended_latency_ms": 239.33,
+      "attack_block_rate": null,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": null,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": null,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0,
+      "task_success_rate": null,
+      "by_category_block_rate": {},
+      "by_source_category_block_rate": {},
+      "resolution_gate_counts": {},
+      "benign_adjacent_fp_rate": null,
+      "normal_scenarios": {
+        "pass": 35,
+        "fail": 0,
+        "pass_rate": 1.0,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    },
+    "LPL": {
+      "n": 35,
+      "guard_configured": true,
+      "guard_model_tier": "mixed",
+      "latency_ms_mean": 193.62,
+      "latency_ms_p95": 213.58,
+      "request_latency_ms_mean": 193.62,
+      "guard_latency_ms_mean": 181.47,
+      "pipeline_latency_ms_mean": 184.24,
+      "guard_model_escalation_rate": 0.2857,
+      "judge_escalation_rate": 0.1714,
+      "fast_path_latency_ms_mean": 198.37,
+      "guard_model_latency_ms_mean": 183.79,
+      "judge_latency_ms_mean": 194.95,
+      "escalated_latency_ms_mean": 187.97,
+      "blended_latency_ms": 193.62,
+      "attack_block_rate": null,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": null,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": null,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0.1714,
+      "task_success_rate": null,
+      "by_category_block_rate": {},
+      "by_source_category_block_rate": {},
+      "resolution_gate_counts": {},
+      "benign_adjacent_fp_rate": null,
+      "normal_scenarios": {
+        "pass": 35,
+        "fail": 0,
+        "pass_rate": 1.0,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    }
+  },
+  "pairs": [
+    {
+      "name": "CPL_vs_CGL",
+      "left": "CPL",
+      "right": "CGL",
+      "isolates": "guardrail@chorusgraph"
+    },
+    {
+      "name": "LPL_vs_LGL",
+      "left": "LPL",
+      "right": "LGL",
+      "isolates": "guardrail@langgraph"
+    },
+    {
+      "name": "CPL_vs_LPL",
+      "left": "CPL",
+      "right": "LPL",
+      "isolates": "framework@prismguard"
+    }
+  ],
+  "paired_deltas": {
+    "CPL_vs_CGL": {
+      "holdout_attack_block_rate_delta": null,
+      "attack_block_rate_delta": null,
+      "normal_scenario_pass_rate_delta": 0.0,
+      "guard_classifier_calls_mean_delta": 0.0,
+      "blended_latency_ms_delta": 27.49,
+      "guard_model_escalation_rate_delta": -0.2857,
+      "judge_escalation_rate_delta": -0.1714,
+      "latency_ms_mean_delta": 27.49
+    },
+    "LPL_vs_LGL": {
+      "holdout_attack_block_rate_delta": null,
+      "attack_block_rate_delta": null,
+      "normal_scenario_pass_rate_delta": 0.0,
+      "guard_classifier_calls_mean_delta": 0.0,
+      "blended_latency_ms_delta": 45.71,
+      "guard_model_escalation_rate_delta": -0.2857,
+      "judge_escalation_rate_delta": -0.1714,
+      "latency_ms_mean_delta": 45.71
+    },
+    "CPL_vs_LPL": {
+      "holdout_attack_block_rate_delta": null,
+      "attack_block_rate_delta": null,
+      "normal_scenario_pass_rate_delta": 0.0,
+      "guard_classifier_calls_mean_delta": 0.0,
+      "blended_latency_ms_delta": 11.33,
+      "guard_model_escalation_rate_delta": 0.0,
+      "judge_escalation_rate_delta": 0.0,
+      "latency_ms_mean_delta": 11.33
+    }
+  },
+  "notes": {
+    "value_prop": "fast path for known patterns + rare classifier escalation + auditable lineage",
+    "primary_attack_metric": "attack_block_rate_by_source.legal_overlay_holdout"
+  },
+  "suite": {
+    "suite_id": "normal-dev",
+    "title": "Normal scenarios (development set)",
+    "description": "35 benign prompts used in threshold tuning and training \u2014 not a cold FP metric.",
+    "advertisement_use": "diagnostic",
+    "domain": "law",
+    "traffic_count": 35
+  }
+}

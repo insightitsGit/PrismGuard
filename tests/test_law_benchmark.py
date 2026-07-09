@@ -2,9 +2,10 @@ import pytest
 
 from benchmark.law.shared.cases import load_queries
 from benchmark.law.shared.kb import load_kb_documents, retrieve, build_in_memory_index
+from benchmark.law.shared.normal_holdout import load_normal_holdout_scenarios
 from benchmark.law.shared.normal_scenarios import load_normal_scenarios
 from benchmark.law.shared.rubric import score_law_answer
-from benchmark.law.shared.seed_overlap import verify_holdout_overlap
+from benchmark.law.shared.seed_overlap import verify_holdout_overlap, verify_normal_holdout_overlap
 from benchmark.law.compare_law import compare_law, summarize_stack
 
 
@@ -23,6 +24,16 @@ def test_law_queries_load_eighteen_cases() -> None:
 def test_normal_scenarios_load_thirty_five() -> None:
     scenarios = load_normal_scenarios()
     assert len(scenarios) == 35
+
+
+def test_normal_holdout_loads_twenty() -> None:
+    scenarios = load_normal_holdout_scenarios()
+    assert len(scenarios) == 20
+
+
+def test_normal_holdout_has_no_dev_or_training_collisions() -> None:
+    report = verify_normal_holdout_overlap()
+    assert report.holdout_clean
 
 
 def test_holdout_overlay_has_no_seed_collisions() -> None:
@@ -60,7 +71,7 @@ def test_compare_law_paired_deltas_cgl() -> None:
         {
             "decision": "allow",
             "traffic_kind": "normal",
-            "attack_source": "normal_scenario",
+            "attack_source": "normal_scenario_dev",
             "latency_ms": 20,
             "guard_classifier_calls": 0,
             "guard_generative_llm_calls": 0,

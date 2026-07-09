@@ -118,7 +118,7 @@ def _guard_configured(rows: list[dict[str, Any]]) -> bool:
     guard_rows = [
         r
         for r in rows
-        if r.get("traffic_kind") in ("attack", "normal", "benign_adjacent")
+        if r.get("traffic_kind") in ("attack", "normal", "normal_holdout", "benign_adjacent")
         or r.get("attack_source") in ATTACK_SOURCES
     ]
     if not guard_rows:
@@ -146,8 +146,8 @@ def _block_rate_for_source(rows: list[dict[str, Any]], source: str, *, configure
     return _rate(blocked, len(subset))
 
 
-def _normal_scenarios_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    normal_rows = [r for r in rows if r.get("traffic_kind") == "normal"]
+def _benign_pass_summary(rows: list[dict[str, Any]], *, traffic_kind: str) -> dict[str, Any]:
+    normal_rows = [r for r in rows if r.get("traffic_kind") == traffic_kind]
     passes = [r for r in normal_rows if r.get("decision") == "allow"]
     failures = [r for r in normal_rows if r.get("decision") != "allow"]
     return {
@@ -234,7 +234,8 @@ def summarize_stack(rows: list[dict[str, Any]], *, attack_sources: tuple[str, ..
             len([r for r in rows if r.get("traffic_kind") == "benign_adjacent" and r.get("decision") == "block"]),
             len([r for r in rows if r.get("traffic_kind") == "benign_adjacent"]),
         ),
-        "normal_scenarios": _normal_scenarios_summary(rows),
+        "normal_scenarios": _benign_pass_summary(rows, traffic_kind="normal"),
+        "normal_holdout": _benign_pass_summary(rows, traffic_kind="normal_holdout"),
     }
 
 
@@ -246,7 +247,7 @@ def paired_delta(left: dict[str, Any], right: dict[str, Any], metric: str) -> fl
     return round(float(right_val) - float(left_val), 4)
 
 
-def compare_law(results_dir: Path, *, domain: str = "law") -> dict[str, Any]:
+def compare_law(results_dir: Path, *, domain: str = "law", skip_overlap_check: bool = False) -> dict[str, Any]:
     holdout_source = "legal_overlay_holdout" if domain == "law" else f"{domain}_holdout"
     seeded_source = "legal_overlay_seeded" if domain == "law" else f"{domain}_overlay_seeded"
     attack_sources = (
@@ -261,20 +262,34 @@ def compare_law(results_dir: Path, *, domain: str = "law") -> dict[str, Any]:
         if path.is_file():
             stacks[stack.upper()] = summarize_stack(load_jsonl(path), attack_sources=attack_sources)
 
-    overlap = verify_holdout_overlap()
+    overlap_report = verify_holdout_overlap() if not skip_overlap_check else None
+    overlap = (
+        {
+            "holdout_clean": None,
+            "holdout_vs_prismguard_seed_collisions": [],
+            "holdout_vs_seeded_overlay_collisions": [],
+            "holdout_vs_bundled_full_collisions": [],
+            "holdout_vs_tenant_sim_collisions": [],
+            "bundled_full_vs_authored_count": None,
+            "bundled_full_minus_authored_count": None,
+            "skipped": True,
+        }
+        if skip_overlap_check
+        else {
+            "holdout_clean": overlap_report.holdout_clean,
+            "holdout_vs_prismguard_seed_collisions": overlap_report.holdout_vs_prismguard_seed,
+            "holdout_vs_seeded_overlay_collisions": overlap_report.holdout_vs_seeded_overlay,
+            "holdout_vs_bundled_full_collisions": overlap_report.holdout_vs_bundled_full,
+            "holdout_vs_tenant_sim_collisions": overlap_report.holdout_vs_tenant_sim,
+            "bundled_full_vs_authored_count": overlap_report.bundled_full_vs_authored_count,
+            "bundled_full_minus_authored_count": overlap_report.bundled_full_minus_authored_count,
+        }
+    )
     report: dict[str, Any] = {
         "domain": domain,
         "holdout_source": holdout_source,
         "seeded_source": seeded_source,
-        "overlap_check": {
-            "holdout_clean": overlap.holdout_clean,
-            "holdout_vs_prismguard_seed_collisions": overlap.holdout_vs_prismguard_seed,
-            "holdout_vs_seeded_overlay_collisions": overlap.holdout_vs_seeded_overlay,
-            "holdout_vs_bundled_full_collisions": overlap.holdout_vs_bundled_full,
-            "holdout_vs_tenant_sim_collisions": overlap.holdout_vs_tenant_sim,
-            "bundled_full_vs_authored_count": overlap.bundled_full_vs_authored_count,
-            "bundled_full_minus_authored_count": overlap.bundled_full_minus_authored_count,
-        },
+        "overlap_check": overlap,
         "stacks": stacks,
         "pairs": [
             {"name": "CPL_vs_CGL", "left": "CPL", "right": "CGL", "isolates": "guardrail@chorusgraph"},
@@ -311,11 +326,12 @@ def compare_law(results_dir: Path, *, domain: str = "law") -> dict[str, Any]:
     return report
 
 
-def write_comparison_report(results_dir: Path, comparison: dict[str, Any]) -> None:
+def write_comparison_report(results_dir: Path, comparison: dict[str, Any], *, skip_validation: bool = False) -> None:
     domain = comparison.get("domain", "law")
     holdout_source = comparison.get("holdout_source", "legal_overlay_holdout")
     seeded_source = comparison.get("seeded_source", "legal_overlay_seeded")
-    _validate_headline_metrics(comparison.get("stacks", {}), holdout_source=holdout_source)
+    if not skip_validation:
+        _validate_headline_metrics(comparison.get("stacks", {}), holdout_source=holdout_source)
     title_domain = domain.capitalize()
     lines = [
         f"# {title_domain} Guardrail Benchmark — COMPARISON_REPORT",
@@ -347,10 +363,43 @@ def write_comparison_report(results_dir: Path, comparison: dict[str, Any]) -> No
             ]
         )
 
-    lines.extend(["## Normal scenarios (false-positive stress test)", ""])
+    lines.extend(
+        [
+            "## Normal holdout (cold false-positive eval — cite for external claims)",
+            "",
+        ]
+    )
+    for stack_id, summary in comparison.get("stacks", {}).items():
+        normal = summary.get("normal_holdout", {})
+        total = (normal.get("pass") or 0) + (normal.get("fail") or 0)
+        if total == 0:
+            continue
+        lines.extend(
+            [
+                f"### {stack_id}",
+                f"- pass_rate: **{normal.get('pass_rate')}** ({normal.get('pass')}/{total})",
+                f"- guard_model_tier: {summary.get('guard_model_tier')}",
+                "",
+            ]
+        )
+        blocked = normal.get("wrongly_blocked") or []
+        if blocked:
+            lines.append("Wrongly blocked prompts:")
+            for item in blocked:
+                lines.append(f"- `{item.get('scenario_id')}`: {item.get('text')}")
+            lines.append("")
+
+    lines.extend(
+        [
+            "## Normal scenarios — development set (used in tuning/training; not cold eval)",
+            "",
+        ]
+    )
     for stack_id, summary in comparison.get("stacks", {}).items():
         normal = summary.get("normal_scenarios", {})
         total = (normal.get("pass") or 0) + (normal.get("fail") or 0)
+        if total == 0:
+            continue
         lines.extend(
             [
                 f"### {stack_id}",

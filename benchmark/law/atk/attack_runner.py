@@ -94,7 +94,7 @@ def build_traffic_rows(
             "scenario_id": s.scenario_id,
             "category_slug": s.category_hint,
             "traffic_kind": "normal",
-            "attack_source": "normal_scenario",
+            "attack_source": "normal_scenario_dev",
         }
         for s in load_normal_scenarios()
     )

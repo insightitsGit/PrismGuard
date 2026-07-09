@@ -12,6 +12,9 @@ from prismguard.seed.parse import parse_seed_file
 _DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 _SEEDED_OVERLAY = _DATA_DIR / "legal_attacks.yaml"
 _HOLDOUT_OVERLAY = _DATA_DIR / "legal_attacks_holdout.yaml"
+_NORMAL_DEV = _DATA_DIR / "normal_scenarios.yaml"
+_NORMAL_HOLDOUT = _DATA_DIR / "normal_scenarios_holdout.yaml"
+_HARD_NEGATIVES = _DATA_DIR / "law_benign_hard_negatives.jsonl"
 
 
 def _normalize(text: str) -> str:
@@ -74,6 +77,59 @@ def tenant_sim_attack_texts() -> set[str]:
     if not path.is_file():
         return set()
     return _texts_from_yaml(path)
+
+
+@dataclass(frozen=True)
+class NormalHoldoutOverlapReport:
+    holdout_vs_prismguard_seed: list[str]
+    holdout_vs_normal_dev: list[str]
+    holdout_vs_hard_negatives: list[str]
+    holdout_vs_seeded_overlay: list[str]
+
+    @property
+    def holdout_clean(self) -> bool:
+        return (
+            not self.holdout_vs_prismguard_seed
+            and not self.holdout_vs_normal_dev
+            and not self.holdout_vs_hard_negatives
+            and not self.holdout_vs_seeded_overlay
+        )
+
+
+def _texts_from_jsonl(path: Path) -> set[str]:
+    import json
+
+    texts: set[str] = set()
+    if not path.is_file():
+        return texts
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            text = row.get("text")
+            if text:
+                texts.add(_normalize(text))
+    return texts
+
+
+def normal_holdout_texts() -> set[str]:
+    return _texts_from_yaml(_NORMAL_HOLDOUT)
+
+
+def verify_normal_holdout_overlap() -> NormalHoldoutOverlapReport:
+    holdout = normal_holdout_texts()
+    seeded = prismguard_seeded_texts()
+    dev = _texts_from_yaml(_NORMAL_DEV)
+    hard_neg = _texts_from_jsonl(_HARD_NEGATIVES)
+    seeded_overlay = _texts_from_yaml(_SEEDED_OVERLAY)
+    return NormalHoldoutOverlapReport(
+        holdout_vs_prismguard_seed=sorted(holdout & seeded),
+        holdout_vs_normal_dev=sorted(holdout & dev),
+        holdout_vs_hard_negatives=sorted(holdout & hard_neg),
+        holdout_vs_seeded_overlay=sorted(holdout & seeded_overlay),
+    )
 
 
 def verify_holdout_overlap() -> OverlapReport:

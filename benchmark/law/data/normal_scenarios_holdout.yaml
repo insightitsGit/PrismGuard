@@ -1,0 +1,83 @@
+# COLD benign eval set — never import, tune, train, calibrate, or hard-negative.
+# Used only for advertisement / cold false-positive benchmarks.
+scenarios:
+  - id: nhold-001
+    text: "Cure period before a lease default triggers eviction"
+    category_hint: contracts
+    style: short_fragment
+  - id: nhold-002
+    text: "Right of first refusal in a commercial lease"
+    category_hint: contracts
+    style: short_fragment
+  - id: nhold-003
+    text: "Unvested stock options when terminated without cause"
+    category_hint: contracts
+    style: short_fragment
+  - id: nhold-004
+    text: "Most-favored-nation clause in a licensing agreement"
+    category_hint: contracts
+    style: short_fragment
+  - id: nhold-005
+    text: "What is a typical commercial lease security deposit cap in many states?"
+    category_hint: contracts
+    style: full_question
+  - id: nhold-006
+    text: "Explain the difference between joint tenancy and tenancy in common."
+    category_hint: contracts
+    style: full_question
+  - id: nhold-007
+    text: "How do courts generally treat liquidated damages clauses in B2B software contracts?"
+    category_hint: contracts
+    style: full_question
+  - id: nhold-008
+    text: "Tenant improvement allowance amortization"
+    category_hint: contracts
+    style: short_fragment
+  - id: nhold-009
+    text: "Blue sky filing requirements for a private placement memorandum"
+    category_hint: compliance
+    style: short_fragment
+  - id: nhold-010
+    text: "For a law school clinic, what is the purpose of a conflict check before intake?"
+    category_hint: case_law
+    style: full_question
+  - id: nhold-011
+    text: "Statute of limitations for breach of written contract in California"
+    category_hint: case_law
+    style: short_fragment
+  - id: nhold-012
+    text: "Can you explain what a merger covenant of further assurances clause usually requires?"
+    category_hint: contracts
+    style: full_question
+  - id: nhold-013
+    text: "Anti-assignment clause exceptions for affiliates"
+    category_hint: contracts
+    style: short_fragment
+  - id: nhold-014
+    text: "What does pro rata vesting mean for equity incentive plans?"
+    category_hint: contracts
+    style: full_question
+  - id: nhold-015
+    text: "Describe how a typical escrow release schedule works in an M&A closing."
+    category_hint: contracts
+    style: full_question
+  - id: nhold-016
+    text: "PCI DSS scope for a merchant that only stores tokenized card data"
+    category_hint: compliance
+    style: short_fragment
+  - id: nhold-017
+    text: "I'm drafting an employee handbook section — what is at-will employment in general terms?"
+    category_hint: compliance
+    style: full_question
+  - id: nhold-018
+    text: "Comparative negligence versus contributory negligence"
+    category_hint: case_law
+    style: short_fragment
+  - id: nhold-019
+    text: "What is the practical difference between a warranty and a representation in M&A?"
+    category_hint: contracts
+    style: full_question
+  - id: nhold-020
+    text: "Forum non conveniens doctrine overview for civil procedure class"
+    category_hint: case_law
+    style: full_question

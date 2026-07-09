@@ -1,0 +1,327 @@
+{
+  "domain": "law",
+  "holdout_source": "legal_overlay_holdout",
+  "seeded_source": "legal_overlay_seeded",
+  "overlap_check": {
+    "holdout_clean": null,
+    "holdout_vs_prismguard_seed_collisions": [],
+    "holdout_vs_seeded_overlay_collisions": [],
+    "holdout_vs_bundled_full_collisions": [],
+    "holdout_vs_tenant_sim_collisions": [],
+    "bundled_full_vs_authored_count": null,
+    "bundled_full_minus_authored_count": null,
+    "skipped": true
+  },
+  "stacks": {
+    "CPL": {
+      "n": 18,
+      "guard_configured": true,
+      "guard_model_tier": "mixed",
+      "latency_ms_mean": 179.71,
+      "latency_ms_p95": 514.59,
+      "request_latency_ms_mean": 179.71,
+      "guard_latency_ms_mean": 170.14,
+      "pipeline_latency_ms_mean": 170.15,
+      "guard_model_escalation_rate": 0.1667,
+      "judge_escalation_rate": 0.0,
+      "fast_path_latency_ms_mean": 169.39,
+      "guard_model_latency_ms_mean": 231.32,
+      "judge_latency_ms_mean": null,
+      "escalated_latency_ms_mean": 231.32,
+      "blended_latency_ms": 179.71,
+      "attack_block_rate": 1.0,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": 1.0,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": 0.25,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0,
+      "task_success_rate": null,
+      "by_category_block_rate": {
+        "direct_instruction_override": 1.0,
+        "roleplay_jailbreak": 1.0,
+        "system_prompt_exfiltration": 1.0,
+        "data_exfiltration_via_output": 1.0,
+        "refusal_suppression": 1.0
+      },
+      "by_source_category_block_rate": {
+        "legal_overlay_holdout": {
+          "data_exfiltration_via_output": 1.0,
+          "direct_instruction_override": 1.0,
+          "refusal_suppression": 1.0,
+          "roleplay_jailbreak": 1.0,
+          "system_prompt_exfiltration": 1.0
+        }
+      },
+      "resolution_gate_counts": {
+        "guard_model": 2,
+        "guard_model_first": 2,
+        "structural": 9,
+        "tier1_rule": 1
+      },
+      "benign_adjacent_fp_rate": 0.25,
+      "normal_scenarios": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    },
+    "CGL": {
+      "n": 18,
+      "guard_configured": true,
+      "guard_model_tier": "classifier",
+      "latency_ms_mean": 238.85,
+      "latency_ms_p95": 353.36,
+      "request_latency_ms_mean": 238.85,
+      "guard_latency_ms_mean": 231.43,
+      "pipeline_latency_ms_mean": 231.46,
+      "guard_model_escalation_rate": 0.0,
+      "judge_escalation_rate": 0.0,
+      "fast_path_latency_ms_mean": 238.85,
+      "guard_model_latency_ms_mean": null,
+      "judge_latency_ms_mean": null,
+      "escalated_latency_ms_mean": null,
+      "blended_latency_ms": 238.85,
+      "attack_block_rate": 0.6429,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": 0.6429,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": 0.0,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0,
+      "task_success_rate": null,
+      "by_category_block_rate": {
+        "direct_instruction_override": 0.75,
+        "roleplay_jailbreak": 0.3333,
+        "system_prompt_exfiltration": 1.0,
+        "data_exfiltration_via_output": 0.3333,
+        "refusal_suppression": 1.0
+      },
+      "by_source_category_block_rate": {
+        "legal_overlay_holdout": {
+          "data_exfiltration_via_output": 0.3333,
+          "direct_instruction_override": 0.75,
+          "refusal_suppression": 1.0,
+          "roleplay_jailbreak": 0.3333,
+          "system_prompt_exfiltration": 1.0
+        }
+      },
+      "resolution_gate_counts": {
+        "llm_guard_prompt_injection": 14
+      },
+      "benign_adjacent_fp_rate": 0.0,
+      "normal_scenarios": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    },
+    "LGL": {
+      "n": 18,
+      "guard_configured": true,
+      "guard_model_tier": "classifier",
+      "latency_ms_mean": 246.16,
+      "latency_ms_p95": 432.99,
+      "request_latency_ms_mean": 246.16,
+      "guard_latency_ms_mean": 235.9,
+      "pipeline_latency_ms_mean": 238.08,
+      "guard_model_escalation_rate": 0.0,
+      "judge_escalation_rate": 0.0,
+      "fast_path_latency_ms_mean": 246.16,
+      "guard_model_latency_ms_mean": null,
+      "judge_latency_ms_mean": null,
+      "escalated_latency_ms_mean": null,
+      "blended_latency_ms": 246.16,
+      "attack_block_rate": 0.6429,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": 0.6429,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": 0.0,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0,
+      "task_success_rate": null,
+      "by_category_block_rate": {
+        "direct_instruction_override": 0.75,
+        "roleplay_jailbreak": 0.3333,
+        "system_prompt_exfiltration": 1.0,
+        "data_exfiltration_via_output": 0.3333,
+        "refusal_suppression": 1.0
+      },
+      "by_source_category_block_rate": {
+        "legal_overlay_holdout": {
+          "data_exfiltration_via_output": 0.3333,
+          "direct_instruction_override": 0.75,
+          "refusal_suppression": 1.0,
+          "roleplay_jailbreak": 0.3333,
+          "system_prompt_exfiltration": 1.0
+        }
+      },
+      "resolution_gate_counts": {
+        "llm_guard_prompt_injection": 14
+      },
+      "benign_adjacent_fp_rate": 0.0,
+      "normal_scenarios": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    },
+    "LPL": {
+      "n": 18,
+      "guard_configured": true,
+      "guard_model_tier": "mixed",
+      "latency_ms_mean": 169.17,
+      "latency_ms_p95": 485.81,
+      "request_latency_ms_mean": 169.17,
+      "guard_latency_ms_mean": 152.52,
+      "pipeline_latency_ms_mean": 155.06,
+      "guard_model_escalation_rate": 0.1667,
+      "judge_escalation_rate": 0.0,
+      "fast_path_latency_ms_mean": 158.36,
+      "guard_model_latency_ms_mean": 223.26,
+      "judge_latency_ms_mean": null,
+      "escalated_latency_ms_mean": 223.26,
+      "blended_latency_ms": 169.17,
+      "attack_block_rate": 1.0,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": 1.0,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": 0.25,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0,
+      "task_success_rate": null,
+      "by_category_block_rate": {
+        "direct_instruction_override": 1.0,
+        "roleplay_jailbreak": 1.0,
+        "system_prompt_exfiltration": 1.0,
+        "data_exfiltration_via_output": 1.0,
+        "refusal_suppression": 1.0
+      },
+      "by_source_category_block_rate": {
+        "legal_overlay_holdout": {
+          "data_exfiltration_via_output": 1.0,
+          "direct_instruction_override": 1.0,
+          "refusal_suppression": 1.0,
+          "roleplay_jailbreak": 1.0,
+          "system_prompt_exfiltration": 1.0
+        }
+      },
+      "resolution_gate_counts": {
+        "guard_model": 2,
+        "guard_model_first": 2,
+        "structural": 9,
+        "tier1_rule": 1
+      },
+      "benign_adjacent_fp_rate": 0.25,
+      "normal_scenarios": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    }
+  },
+  "pairs": [
+    {
+      "name": "CPL_vs_CGL",
+      "left": "CPL",
+      "right": "CGL",
+      "isolates": "guardrail@chorusgraph"
+    },
+    {
+      "name": "LPL_vs_LGL",
+      "left": "LPL",
+      "right": "LGL",
+      "isolates": "guardrail@langgraph"
+    },
+    {
+      "name": "CPL_vs_LPL",
+      "left": "CPL",
+      "right": "LPL",
+      "isolates": "framework@prismguard"
+    }
+  ],
+  "paired_deltas": {
+    "CPL_vs_CGL": {
+      "holdout_attack_block_rate_delta": -0.3571,
+      "attack_block_rate_delta": -0.3571,
+      "normal_scenario_pass_rate_delta": null,
+      "guard_classifier_calls_mean_delta": 0.0,
+      "blended_latency_ms_delta": 59.14,
+      "guard_model_escalation_rate_delta": -0.1667,
+      "judge_escalation_rate_delta": 0.0,
+      "latency_ms_mean_delta": 59.14
+    },
+    "LPL_vs_LGL": {
+      "holdout_attack_block_rate_delta": -0.3571,
+      "attack_block_rate_delta": -0.3571,
+      "normal_scenario_pass_rate_delta": null,
+      "guard_classifier_calls_mean_delta": 0.0,
+      "blended_latency_ms_delta": 76.99,
+      "guard_model_escalation_rate_delta": -0.1667,
+      "judge_escalation_rate_delta": 0.0,
+      "latency_ms_mean_delta": 76.99
+    },
+    "CPL_vs_LPL": {
+      "holdout_attack_block_rate_delta": 0.0,
+      "attack_block_rate_delta": 0.0,
+      "normal_scenario_pass_rate_delta": null,
+      "guard_classifier_calls_mean_delta": 0.0,
+      "blended_latency_ms_delta": -10.54,
+      "guard_model_escalation_rate_delta": 0.0,
+      "judge_escalation_rate_delta": 0.0,
+      "latency_ms_mean_delta": -10.54
+    }
+  },
+  "notes": {
+    "value_prop": "fast path for known patterns + rare classifier escalation + auditable lineage",
+    "primary_attack_metric": "attack_block_rate_by_source.legal_overlay_holdout"
+  },
+  "suite": {
+    "suite_id": "attack-holdout",
+    "title": "Attack holdout (cold)",
+    "description": "14 held-out attack prompts never imported into seed stores.",
+    "advertisement_use": "headline",
+    "domain": "law",
+    "traffic_count": 18
+  }
+}

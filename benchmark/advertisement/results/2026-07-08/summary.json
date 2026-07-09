@@ -1,0 +1,166 @@
+{
+  "generated_at": "2026-07-09T03:08:24.638463+00:00",
+  "results_root": "benchmark\\advertisement\\results\\2026-07-08",
+  "overlap_check": {
+    "attack_holdout_clean": true,
+    "normal_holdout_clean": true,
+    "normal_holdout_vs_dev_collisions": [],
+    "normal_holdout_vs_hard_negatives": []
+  },
+  "headlines": [
+    {
+      "suite_id": "attack-holdout",
+      "advertisement_use": "headline",
+      "traffic_count": 18,
+      "cpl_request_latency_ms_mean": 179.71,
+      "cpl_attack_holdout_block_rate": 1.0,
+      "cpl_attack_block_rate": 1.0,
+      "cpl_normal_dev_pass_rate": null,
+      "cpl_normal_holdout_pass_rate": null,
+      "cpl_kb_benign_fp_rate": 0.25
+    },
+    {
+      "suite_id": "attack-seeded",
+      "advertisement_use": "diagnostic",
+      "traffic_count": 18,
+      "cpl_request_latency_ms_mean": 155.9,
+      "cpl_attack_holdout_block_rate": null,
+      "cpl_attack_block_rate": 0.7143,
+      "cpl_normal_dev_pass_rate": null,
+      "cpl_normal_holdout_pass_rate": null,
+      "cpl_kb_benign_fp_rate": 0.0
+    },
+    {
+      "suite_id": "normal-dev",
+      "advertisement_use": "diagnostic",
+      "traffic_count": 35,
+      "cpl_request_latency_ms_mean": 182.29,
+      "cpl_attack_holdout_block_rate": null,
+      "cpl_attack_block_rate": null,
+      "cpl_normal_dev_pass_rate": 1.0,
+      "cpl_normal_holdout_pass_rate": null,
+      "cpl_kb_benign_fp_rate": null
+    },
+    {
+      "suite_id": "normal-holdout",
+      "advertisement_use": "headline",
+      "traffic_count": 20,
+      "cpl_request_latency_ms_mean": 191.13,
+      "cpl_attack_holdout_block_rate": null,
+      "cpl_attack_block_rate": null,
+      "cpl_normal_dev_pass_rate": null,
+      "cpl_normal_holdout_pass_rate": 0.6,
+      "cpl_kb_benign_fp_rate": null
+    },
+    {
+      "suite_id": "law-kb-benign",
+      "advertisement_use": "supporting",
+      "traffic_count": 18,
+      "cpl_request_latency_ms_mean": 178.68,
+      "cpl_attack_holdout_block_rate": null,
+      "cpl_attack_block_rate": null,
+      "cpl_normal_dev_pass_rate": null,
+      "cpl_normal_holdout_pass_rate": null,
+      "cpl_kb_benign_fp_rate": 0.5
+    },
+    {
+      "suite_id": "law-full",
+      "advertisement_use": "supporting",
+      "traffic_count": 209,
+      "cpl_request_latency_ms_mean": 166.86,
+      "cpl_attack_holdout_block_rate": 1.0,
+      "cpl_attack_block_rate": 0.8476,
+      "cpl_normal_dev_pass_rate": 1.0,
+      "cpl_normal_holdout_pass_rate": 0.6,
+      "cpl_kb_benign_fp_rate": 0.3265
+    },
+    {
+      "suite_id": "healthcare-domain",
+      "advertisement_use": "supporting",
+      "traffic_count": 163,
+      "cpl_request_latency_ms_mean": 170.22,
+      "cpl_attack_holdout_block_rate": 0.75,
+      "cpl_attack_block_rate": 0.9524,
+      "cpl_normal_dev_pass_rate": 0.6857,
+      "cpl_normal_holdout_pass_rate": null,
+      "cpl_kb_benign_fp_rate": 0.7273
+    },
+    {
+      "suite_id": "finance-domain",
+      "advertisement_use": "supporting",
+      "traffic_count": 163,
+      "cpl_request_latency_ms_mean": 172.15,
+      "cpl_attack_holdout_block_rate": 0.75,
+      "cpl_attack_block_rate": 0.9524,
+      "cpl_normal_dev_pass_rate": 0.6857,
+      "cpl_normal_holdout_pass_rate": null,
+      "cpl_kb_benign_fp_rate": 0.75
+    }
+  ],
+  "suites": [
+    {
+      "suite_id": "attack-holdout",
+      "title": "Attack holdout (cold)",
+      "description": "14 held-out attack prompts never imported into seed stores.",
+      "advertisement_use": "headline",
+      "domain": "law",
+      "traffic_count": 18
+    },
+    {
+      "suite_id": "attack-seeded",
+      "title": "Attack seeded overlay",
+      "description": "Seeded overlay attacks (in-corpus); diagnostic only, not for cold detection claims.",
+      "advertisement_use": "diagnostic",
+      "domain": "law",
+      "traffic_count": 18
+    },
+    {
+      "suite_id": "normal-dev",
+      "title": "Normal scenarios (development set)",
+      "description": "35 benign prompts used in threshold tuning and training \u2014 not a cold FP metric.",
+      "advertisement_use": "diagnostic",
+      "domain": "law",
+      "traffic_count": 35
+    },
+    {
+      "suite_id": "normal-holdout",
+      "title": "Normal holdout (cold)",
+      "description": "20 cold benign prompts never used in tune/train/calibrate \u2014 cite for FP generalization.",
+      "advertisement_use": "headline",
+      "domain": "law",
+      "traffic_count": 20
+    },
+    {
+      "suite_id": "law-kb-benign",
+      "title": "Law KB benign queries",
+      "description": "18 in-domain RAG benign queries from the law assistant benchmark.",
+      "advertisement_use": "supporting",
+      "domain": "law",
+      "traffic_count": 18
+    },
+    {
+      "suite_id": "law-full",
+      "title": "Law full benchmark",
+      "description": "Combined law traffic: KB benign, normal dev, normal holdout, overlays, bundled attacks.",
+      "advertisement_use": "supporting",
+      "domain": "law",
+      "traffic_count": 209
+    },
+    {
+      "suite_id": "healthcare-domain",
+      "title": "Healthcare domain pack",
+      "description": "Healthcare overlay + holdout with law-derived bundled traffic.",
+      "advertisement_use": "supporting",
+      "domain": "healthcare",
+      "traffic_count": 163
+    },
+    {
+      "suite_id": "finance-domain",
+      "title": "Finance domain pack",
+      "description": "Finance overlay + holdout with law-derived bundled traffic.",
+      "advertisement_use": "supporting",
+      "domain": "finance",
+      "traffic_count": 163
+    }
+  ]
+}

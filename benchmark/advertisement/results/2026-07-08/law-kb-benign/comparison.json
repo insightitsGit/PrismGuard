@@ -1,0 +1,257 @@
+{
+  "domain": "law",
+  "holdout_source": "legal_overlay_holdout",
+  "seeded_source": "legal_overlay_seeded",
+  "overlap_check": {
+    "holdout_clean": null,
+    "holdout_vs_prismguard_seed_collisions": [],
+    "holdout_vs_seeded_overlay_collisions": [],
+    "holdout_vs_bundled_full_collisions": [],
+    "holdout_vs_tenant_sim_collisions": [],
+    "bundled_full_vs_authored_count": null,
+    "bundled_full_minus_authored_count": null,
+    "skipped": true
+  },
+  "stacks": {
+    "CPL": {
+      "n": 18,
+      "guard_configured": true,
+      "guard_model_tier": "mixed",
+      "latency_ms_mean": 178.68,
+      "latency_ms_p95": 217.16,
+      "request_latency_ms_mean": 178.68,
+      "guard_latency_ms_mean": 168.52,
+      "pipeline_latency_ms_mean": 168.63,
+      "guard_model_escalation_rate": 0.6111,
+      "judge_escalation_rate": 0.0,
+      "fast_path_latency_ms_mean": 171.6,
+      "guard_model_latency_ms_mean": 183.19,
+      "judge_latency_ms_mean": null,
+      "escalated_latency_ms_mean": 183.19,
+      "blended_latency_ms": 178.68,
+      "attack_block_rate": null,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": null,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": 0.5,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0,
+      "task_success_rate": 0.4444,
+      "by_category_block_rate": {},
+      "by_source_category_block_rate": {},
+      "resolution_gate_counts": {},
+      "benign_adjacent_fp_rate": null,
+      "normal_scenarios": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    },
+    "CGL": {
+      "n": 18,
+      "guard_configured": true,
+      "guard_model_tier": "classifier",
+      "latency_ms_mean": 146.09,
+      "latency_ms_p95": 203.43,
+      "request_latency_ms_mean": 146.09,
+      "guard_latency_ms_mean": 140.66,
+      "pipeline_latency_ms_mean": 140.79,
+      "guard_model_escalation_rate": 0.0,
+      "judge_escalation_rate": 0.0,
+      "fast_path_latency_ms_mean": 146.09,
+      "guard_model_latency_ms_mean": null,
+      "judge_latency_ms_mean": null,
+      "escalated_latency_ms_mean": null,
+      "blended_latency_ms": 146.09,
+      "attack_block_rate": null,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": null,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": 0.0,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0,
+      "task_success_rate": 0.9444,
+      "by_category_block_rate": {},
+      "by_source_category_block_rate": {},
+      "resolution_gate_counts": {},
+      "benign_adjacent_fp_rate": null,
+      "normal_scenarios": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    },
+    "LGL": {
+      "n": 18,
+      "guard_configured": true,
+      "guard_model_tier": "classifier",
+      "latency_ms_mean": 172.2,
+      "latency_ms_p95": 262.48,
+      "request_latency_ms_mean": 172.2,
+      "guard_latency_ms_mean": 160.97,
+      "pipeline_latency_ms_mean": 163.3,
+      "guard_model_escalation_rate": 0.0,
+      "judge_escalation_rate": 0.0,
+      "fast_path_latency_ms_mean": 172.2,
+      "guard_model_latency_ms_mean": null,
+      "judge_latency_ms_mean": null,
+      "escalated_latency_ms_mean": null,
+      "blended_latency_ms": 172.2,
+      "attack_block_rate": null,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": null,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": 0.0,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0,
+      "task_success_rate": 0.9444,
+      "by_category_block_rate": {},
+      "by_source_category_block_rate": {},
+      "resolution_gate_counts": {},
+      "benign_adjacent_fp_rate": null,
+      "normal_scenarios": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    },
+    "LPL": {
+      "n": 18,
+      "guard_configured": true,
+      "guard_model_tier": "mixed",
+      "latency_ms_mean": 193.57,
+      "latency_ms_p95": 204.66,
+      "request_latency_ms_mean": 193.57,
+      "guard_latency_ms_mean": 178.93,
+      "pipeline_latency_ms_mean": 182.27,
+      "guard_model_escalation_rate": 0.6111,
+      "judge_escalation_rate": 0.0,
+      "fast_path_latency_ms_mean": 206.54,
+      "guard_model_latency_ms_mean": 185.31,
+      "judge_latency_ms_mean": null,
+      "escalated_latency_ms_mean": 185.31,
+      "blended_latency_ms": 193.57,
+      "attack_block_rate": null,
+      "attack_block_rate_by_source": {
+        "legal_overlay_seeded": null,
+        "legal_overlay_holdout": null,
+        "tenant_sim_holdout": null,
+        "bundled_full": null
+      },
+      "false_positive_rate": 0.5,
+      "guard_classifier_calls_mean": 1,
+      "guard_generative_llm_calls_mean": 0,
+      "task_success_rate": 0.4444,
+      "by_category_block_rate": {},
+      "by_source_category_block_rate": {},
+      "resolution_gate_counts": {},
+      "benign_adjacent_fp_rate": null,
+      "normal_scenarios": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      },
+      "normal_holdout": {
+        "pass": 0,
+        "fail": 0,
+        "pass_rate": null,
+        "wrongly_blocked": []
+      }
+    }
+  },
+  "pairs": [
+    {
+      "name": "CPL_vs_CGL",
+      "left": "CPL",
+      "right": "CGL",
+      "isolates": "guardrail@chorusgraph"
+    },
+    {
+      "name": "LPL_vs_LGL",
+      "left": "LPL",
+      "right": "LGL",
+      "isolates": "guardrail@langgraph"
+    },
+    {
+      "name": "CPL_vs_LPL",
+      "left": "CPL",
+      "right": "LPL",
+      "isolates": "framework@prismguard"
+    }
+  ],
+  "paired_deltas": {
+    "CPL_vs_CGL": {
+      "holdout_attack_block_rate_delta": null,
+      "attack_block_rate_delta": null,
+      "normal_scenario_pass_rate_delta": null,
+      "guard_classifier_calls_mean_delta": 0.0,
+      "blended_latency_ms_delta": -32.59,
+      "guard_model_escalation_rate_delta": -0.6111,
+      "judge_escalation_rate_delta": 0.0,
+      "latency_ms_mean_delta": -32.59
+    },
+    "LPL_vs_LGL": {
+      "holdout_attack_block_rate_delta": null,
+      "attack_block_rate_delta": null,
+      "normal_scenario_pass_rate_delta": null,
+      "guard_classifier_calls_mean_delta": 0.0,
+      "blended_latency_ms_delta": -21.37,
+      "guard_model_escalation_rate_delta": -0.6111,
+      "judge_escalation_rate_delta": 0.0,
+      "latency_ms_mean_delta": -21.37
+    },
+    "CPL_vs_LPL": {
+      "holdout_attack_block_rate_delta": null,
+      "attack_block_rate_delta": null,
+      "normal_scenario_pass_rate_delta": null,
+      "guard_classifier_calls_mean_delta": 0.0,
+      "blended_latency_ms_delta": 14.89,
+      "guard_model_escalation_rate_delta": 0.0,
+      "judge_escalation_rate_delta": 0.0,
+      "latency_ms_mean_delta": 14.89
+    }
+  },
+  "notes": {
+    "value_prop": "fast path for known patterns + rare classifier escalation + auditable lineage",
+    "primary_attack_metric": "attack_block_rate_by_source.legal_overlay_holdout"
+  },
+  "suite": {
+    "suite_id": "law-kb-benign",
+    "title": "Law KB benign queries",
+    "description": "18 in-domain RAG benign queries from the law assistant benchmark.",
+    "advertisement_use": "supporting",
+    "domain": "law",
+    "traffic_count": 18
+  }
+}
