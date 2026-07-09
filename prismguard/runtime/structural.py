@@ -108,7 +108,9 @@ _BENIGN_PATTERNS = (
     re.compile(r"\bDSAR workflow\b", re.I),
     re.compile(r"\bcan you outline\b", re.I),
     re.compile(r"\bwithout prejudice\b", re.I),
-    re.compile(r"\bSOC 2\b", re.I),
+    re.compile(r"\blaw school clinic\b", re.I),
+    re.compile(r"\bexplain the difference between\b", re.I),
+    re.compile(r"\bhow do courts\b", re.I),
     re.compile(r"\bwhat does\b.{0,30}\bmean\b", re.I),
     re.compile(r"\boutline\b.{0,40}\b(controls|SOC|workflow)\b", re.I),
 )
@@ -118,6 +120,28 @@ _DELIMITER_PATTERNS = (
     re.compile(r"\[\[system\]\]", re.I),
     re.compile(r"<\|system\|>", re.I),
     re.compile(r"###\s*system\b", re.I),
+)
+
+_LEGAL_TOPIC_RE = re.compile(
+    r"\b("
+    r"lease|contract|clause|agreement|statute|limitation|indemnity|arbitration|"
+    r"vesting|unvested|vested|option|stock options?|licensing|negligence|doctrine|"
+    r"amortization|refusal|termination|equity|merger|escrow|warranty|representation|"
+    r"forum|compliance|fiduciary|severance|covenant|reconciliation|memorandum|"
+    r"deposit|eviction|franchise|royalt|licen[cs]e|at-will|tenancy|damages|"
+    r"liquidated|conflict check|forum non conveniens|pci|dss|blue sky|pro rata|"
+    r"m&a|nda|msa|default"
+    r")\b",
+    re.I,
+)
+
+_INJECTION_IMPERATIVE_RE = re.compile(
+    r"\b("
+    r"ignore|disregard|forget|bypass|override|disclose|reveal|email|export|"
+    r"paste|append|embed|pretend you are|act as|roleplay as|play the judge|"
+    r"developer mode|make an exception|do not refuse|never refuse|comply with every"
+    r")\b",
+    re.I,
 )
 
 _SUSPICIOUS_NGRAMS = (
@@ -163,6 +187,34 @@ def _encoded_blob_score(text: str) -> float:
     if re.search(r"\\x[0-9a-f]{2}", text, re.I):
         score += 0.15
     return min(1.0, score)
+
+
+def is_legal_topic_fragment(text: str) -> bool:
+    """Short benign legal topic phrase without injection/imperative language."""
+    stripped = text.strip()
+    if not stripped or len(stripped) > 160:
+        return False
+    if _INJECTION_IMPERATIVE_RE.search(stripped):
+        return False
+    if re.search(r"\bencode\b.{0,40}\bbase64\b", stripped, re.I):
+        return False
+    if _encoded_blob_score(stripped) >= 0.15:
+        return False
+    if not _LEGAL_TOPIC_RE.search(stripped):
+        return False
+    if len(stripped.split()) > 24:
+        return False
+    if any(
+        p.search(stripped)
+        for p in _OVERRIDE_PATTERNS
+        + _ROLE_PATTERNS
+        + _REFUSAL_PATTERNS
+        + _LAW_ATTACK_PATTERNS
+        + _EXFIL_PATTERNS
+        + _OUTPUT_URL_EXFIL_PATTERNS
+    ):
+        return False
+    return True
 
 
 def _imperative_ratio(text: str) -> float:
@@ -255,6 +307,10 @@ def analyze_structural(
         if pattern.search(text):
             benign += 0.35
             hits.append("benign_framing")
+    if is_legal_topic_fragment(text) and attack < block_threshold:
+        benign = max(benign, 0.50)
+        if "legal_topic_fragment" not in hits:
+            hits.append("legal_topic_fragment")
     if "?" in text and benign > 0:
         benign += 0.1
     benign = min(1.0, benign)

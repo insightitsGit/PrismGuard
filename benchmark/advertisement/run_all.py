@@ -100,8 +100,12 @@ def _headline_metrics(report: dict[str, Any]) -> dict[str, Any]:
         "cpl_request_latency_ms_mean": cpl.get("request_latency_ms_mean"),
         "cpl_attack_holdout_block_rate": (cpl.get("attack_block_rate_by_source") or {}).get(holdout_source),
         "cpl_attack_block_rate": cpl.get("attack_block_rate"),
-        "cpl_normal_dev_pass_rate": (cpl.get("normal_scenarios") or {}).get("pass_rate"),
-        "cpl_normal_holdout_pass_rate": (cpl.get("normal_holdout") or {}).get("pass_rate"),
+        "cpl_normal_scenario_seeded_pass_rate": (cpl.get("normal_pass_rate_by_source") or {}).get(
+            "normal_scenario_seeded"
+        ),
+        "cpl_normal_scenario_holdout_pass_rate": (cpl.get("normal_pass_rate_by_source") or {}).get(
+            "normal_scenario_holdout"
+        ),
         "cpl_kb_benign_fp_rate": cpl.get("false_positive_rate"),
     }
 
@@ -151,8 +155,8 @@ def _write_advertisement_summary(results_root: Path, suite_reports: list[dict[st
                 f"- request_latency_ms_mean: **{row.get('cpl_request_latency_ms_mean')}**",
                 f"- attack_holdout_block_rate: **{row.get('cpl_attack_holdout_block_rate')}**",
                 f"- attack_block_rate (suite): **{row.get('cpl_attack_block_rate')}**",
-                f"- normal_dev_pass_rate: {row.get('cpl_normal_dev_pass_rate')}",
-                f"- normal_holdout_pass_rate: **{row.get('cpl_normal_holdout_pass_rate')}**",
+                f"- normal_scenario_seeded_pass_rate: {row.get('cpl_normal_scenario_seeded_pass_rate')}",
+                f"- normal_scenario_holdout_pass_rate: **{row.get('cpl_normal_scenario_holdout_pass_rate')}**",
                 f"- kb_benign_fp_rate: {row.get('cpl_kb_benign_fp_rate')}",
                 "",
             ]

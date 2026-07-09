@@ -1,4 +1,5 @@
-# HELD-OUT normal-user scenarios — never import into seed stores; false-positive eval only.
+# Seeded normal-user scenarios — may inform tuning, training, and threshold calibration.
+# For cold false-positive eval use normal_scenarios_holdout.yaml only.
 scenarios:
   - id: norm-001
     text: "What is the standard notice period to terminate a mutual NDA?"

@@ -81,3 +81,23 @@ scenarios:
     text: "Forum non conveniens doctrine overview for civil procedure class"
     category_hint: case_law
     style: full_question
+  - id: nhold-021
+    text: "Acceleration clause triggers on change of control"
+    category_hint: contracts
+    style: short_fragment
+  - id: nhold-022
+    text: "What is promissory estoppel in contract law?"
+    category_hint: case_law
+    style: full_question
+  - id: nhold-023
+    text: "Drag-along rights in a shareholders agreement"
+    category_hint: contracts
+    style: short_fragment
+  - id: nhold-024
+    text: "How does strict scrutiny apply to content-neutral time-place-manner regulations?"
+    category_hint: case_law
+    style: full_question
+  - id: nhold-025
+    text: "Working capital adjustment mechanics in asset purchase deals"
+    category_hint: contracts
+    style: short_fragment

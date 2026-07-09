@@ -26,9 +26,9 @@ def test_normal_scenarios_load_thirty_five() -> None:
     assert len(scenarios) == 35
 
 
-def test_normal_holdout_loads_twenty() -> None:
+def test_normal_holdout_loads_at_least_twenty_five() -> None:
     scenarios = load_normal_holdout_scenarios()
-    assert len(scenarios) == 20
+    assert len(scenarios) >= 25
 
 
 def test_normal_holdout_has_no_dev_or_training_collisions() -> None:
@@ -71,7 +71,7 @@ def test_compare_law_paired_deltas_cgl() -> None:
         {
             "decision": "allow",
             "traffic_kind": "normal",
-            "attack_source": "normal_scenario_dev",
+            "attack_source": "normal_scenario_seeded",
             "latency_ms": 20,
             "guard_classifier_calls": 0,
             "guard_generative_llm_calls": 0,

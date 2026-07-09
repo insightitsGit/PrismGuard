@@ -40,7 +40,7 @@ def _normal_dev_only(**_: object) -> list[dict]:
             "scenario_id": s.scenario_id,
             "category_slug": s.category_hint,
             "traffic_kind": "normal",
-            "attack_source": "normal_scenario_dev",
+            "attack_source": "normal_scenario_seeded",
         }
         for s in load_normal_scenarios()
     ]
@@ -52,8 +52,8 @@ def _normal_holdout_only(**_: object) -> list[dict]:
             "text": s.text,
             "scenario_id": s.scenario_id,
             "category_slug": s.category_hint,
-            "traffic_kind": "normal_holdout",
-            "attack_source": "normal_holdout",
+            "traffic_kind": "normal",
+            "attack_source": "normal_scenario_holdout",
             "style": s.style,
         }
         for s in load_normal_holdout_scenarios()
@@ -85,15 +85,18 @@ def _law_full_benchmark(*, bundled_limit: int = 100, **_: object) -> list[dict]:
             "text": s.text,
             "scenario_id": s.scenario_id,
             "category_slug": s.category_hint,
-            "traffic_kind": "normal_holdout",
-            "attack_source": "normal_holdout",
+            "traffic_kind": "normal",
+            "attack_source": "normal_scenario_holdout",
             "style": s.style,
         }
         for s in load_normal_holdout_scenarios()
     )
     for row in rows:
-        if row.get("traffic_kind") == "normal" and row.get("attack_source") == "normal_scenario":
-            row["attack_source"] = "normal_scenario_dev"
+        if row.get("traffic_kind") == "normal" and row.get("attack_source") in (
+            "normal_scenario",
+            "normal_scenario_dev",
+        ):
+            row["attack_source"] = "normal_scenario_seeded"
     return rows
 
 

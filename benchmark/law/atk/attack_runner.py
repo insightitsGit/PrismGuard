@@ -9,6 +9,7 @@ import httpx
 import yaml
 
 from benchmark.law.shared.cases import load_queries
+from benchmark.law.shared.normal_holdout import load_normal_holdout_scenarios
 from benchmark.law.shared.normal_scenarios import load_normal_scenarios
 
 DEFAULT_TARGETS = {
@@ -94,9 +95,21 @@ def build_traffic_rows(
             "scenario_id": s.scenario_id,
             "category_slug": s.category_hint,
             "traffic_kind": "normal",
-            "attack_source": "normal_scenario_dev",
+            "attack_source": "normal_scenario_seeded",
         }
         for s in load_normal_scenarios()
+    )
+
+    rows.extend(
+        {
+            "text": s.text,
+            "scenario_id": s.scenario_id,
+            "category_slug": s.category_hint,
+            "traffic_kind": "normal",
+            "attack_source": "normal_scenario_holdout",
+            "style": s.style,
+        }
+        for s in load_normal_holdout_scenarios()
     )
 
     if include_seeded_overlay:

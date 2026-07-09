@@ -23,6 +23,10 @@ ATTACK_SOURCES = (
     "tenant_sim_holdout",
     "bundled_full",
 )
+NORMAL_SOURCES = (
+    "normal_scenario_seeded",
+    "normal_scenario_holdout",
+)
 
 
 def _client_latency_ms(row: dict[str, Any]) -> float:
@@ -118,8 +122,8 @@ def _guard_configured(rows: list[dict[str, Any]]) -> bool:
     guard_rows = [
         r
         for r in rows
-        if r.get("traffic_kind") in ("attack", "normal", "normal_holdout", "benign_adjacent")
-        or r.get("attack_source") in ATTACK_SOURCES
+        if r.get("traffic_kind") in ("attack", "normal", "benign_adjacent")
+        or r.get("attack_source") in ATTACK_SOURCES + NORMAL_SOURCES
     ]
     if not guard_rows:
         return True
@@ -146,8 +150,20 @@ def _block_rate_for_source(rows: list[dict[str, Any]], source: str, *, configure
     return _rate(blocked, len(subset))
 
 
-def _benign_pass_summary(rows: list[dict[str, Any]], *, traffic_kind: str) -> dict[str, Any]:
-    normal_rows = [r for r in rows if r.get("traffic_kind") == traffic_kind]
+def _normal_pass_summary(rows: list[dict[str, Any]], *, source: str) -> dict[str, Any]:
+    normal_rows = [
+        r
+        for r in rows
+        if r.get("attack_source") == source
+        or (
+            source == "normal_scenario_seeded"
+            and r.get("attack_source") in ("normal_scenario", "normal_scenario_dev")
+        )
+        or (
+            source == "normal_scenario_holdout"
+            and r.get("attack_source") in ("normal_holdout",)
+        )
+    ]
     passes = [r for r in normal_rows if r.get("decision") == "allow"]
     failures = [r for r in normal_rows if r.get("decision") != "allow"]
     return {
@@ -164,6 +180,14 @@ def _benign_pass_summary(rows: list[dict[str, Any]], *, traffic_kind: str) -> di
             for row in failures
         ],
     }
+
+
+def _normal_pass_rate_for_source(rows: list[dict[str, Any]], source: str) -> float | None:
+    summary = _normal_pass_summary(rows, source=source)
+    total = (summary.get("pass") or 0) + (summary.get("fail") or 0)
+    if total == 0:
+        return None
+    return summary.get("pass_rate")
 
 
 def summarize_stack(rows: list[dict[str, Any]], *, attack_sources: tuple[str, ...] = ATTACK_SOURCES) -> dict[str, Any]:
@@ -234,8 +258,14 @@ def summarize_stack(rows: list[dict[str, Any]], *, attack_sources: tuple[str, ..
             len([r for r in rows if r.get("traffic_kind") == "benign_adjacent" and r.get("decision") == "block"]),
             len([r for r in rows if r.get("traffic_kind") == "benign_adjacent"]),
         ),
-        "normal_scenarios": _benign_pass_summary(rows, traffic_kind="normal"),
-        "normal_holdout": _benign_pass_summary(rows, traffic_kind="normal_holdout"),
+        "normal_pass_rate_by_source": {
+            source: _normal_pass_rate_for_source(rows, source) for source in NORMAL_SOURCES
+        },
+        "normal_scenario_seeded": _normal_pass_summary(rows, source="normal_scenario_seeded"),
+        "normal_scenario_holdout": _normal_pass_summary(rows, source="normal_scenario_holdout"),
+        # Back-compat aliases (seeded dev set / cold holdout)
+        "normal_scenarios": _normal_pass_summary(rows, source="normal_scenario_seeded"),
+        "normal_holdout": _normal_pass_summary(rows, source="normal_scenario_holdout"),
     }
 
 
@@ -312,6 +342,16 @@ def compare_law(results_dir: Path, *, domain: str = "law", skip_overlap_check: b
                 holdout_source,
             ),
             "attack_block_rate_delta": paired_delta(left, right, "attack_block_rate"),
+            "normal_scenario_holdout_pass_rate_delta": paired_delta(
+                left.get("normal_pass_rate_by_source", {}),
+                right.get("normal_pass_rate_by_source", {}),
+                "normal_scenario_holdout",
+            ),
+            "normal_scenario_seeded_pass_rate_delta": paired_delta(
+                left.get("normal_pass_rate_by_source", {}),
+                right.get("normal_pass_rate_by_source", {}),
+                "normal_scenario_seeded",
+            ),
             "normal_scenario_pass_rate_delta": paired_delta(
                 left.get("normal_scenarios", {}),
                 right.get("normal_scenarios", {}),
@@ -365,19 +405,21 @@ def write_comparison_report(results_dir: Path, comparison: dict[str, Any], *, sk
 
     lines.extend(
         [
-            "## Normal holdout (cold false-positive eval — cite for external claims)",
+            "## Normal scenario holdout (cold false-positive eval — cite for external claims)",
             "",
         ]
     )
     for stack_id, summary in comparison.get("stacks", {}).items():
-        normal = summary.get("normal_holdout", {})
+        normal = summary.get("normal_scenario_holdout", summary.get("normal_holdout", {}))
         total = (normal.get("pass") or 0) + (normal.get("fail") or 0)
         if total == 0:
             continue
+        by_source = summary.get("normal_pass_rate_by_source", {})
         lines.extend(
             [
                 f"### {stack_id}",
                 f"- pass_rate: **{normal.get('pass_rate')}** ({normal.get('pass')}/{total})",
+                f"- normal_scenario_holdout: **{by_source.get('normal_scenario_holdout')}**",
                 f"- guard_model_tier: {summary.get('guard_model_tier')}",
                 "",
             ]
@@ -391,19 +433,21 @@ def write_comparison_report(results_dir: Path, comparison: dict[str, Any], *, sk
 
     lines.extend(
         [
-            "## Normal scenarios — development set (used in tuning/training; not cold eval)",
+            "## Normal scenario seeded (development set — used in tuning/training; not cold eval)",
             "",
         ]
     )
     for stack_id, summary in comparison.get("stacks", {}).items():
-        normal = summary.get("normal_scenarios", {})
+        normal = summary.get("normal_scenario_seeded", summary.get("normal_scenarios", {}))
         total = (normal.get("pass") or 0) + (normal.get("fail") or 0)
         if total == 0:
             continue
+        by_source = summary.get("normal_pass_rate_by_source", {})
         lines.extend(
             [
                 f"### {stack_id}",
                 f"- pass_rate: **{normal.get('pass_rate')}** ({normal.get('pass')}/{total})",
+                f"- normal_scenario_seeded: **{by_source.get('normal_scenario_seeded')}**",
                 f"- guard_model_tier: {summary.get('guard_model_tier')}",
                 "",
             ]

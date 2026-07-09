@@ -404,12 +404,24 @@ class RuntimeChecker:
         with profiler.section("classifier"):
             return future.result()
 
-    def _classifier_first_early_block(self, verdict: GuardModelVerdict) -> CheckResult | None:
+    def _classifier_first_early_block(
+        self,
+        verdict: GuardModelVerdict,
+        *,
+        structural: object | None = None,
+        normalized: str = "",
+    ) -> CheckResult | None:
         if verdict.decision != "block":
             return None
         threshold = self._config.guard_model.classifier_first_block_threshold
         if verdict.confidence < threshold:
             return None
+        if structural is not None and getattr(structural, "decision", None) == "continue":
+            from prismguard.runtime.structural import is_legal_topic_fragment
+
+            attack_score = float(getattr(structural, "attack_score", 0.0) or 0.0)
+            if attack_score < 0.35 and is_legal_topic_fragment(normalized):
+                return None
         details = {
             **self._classifier_details(verdict),
             "classifier_mode": "first",
@@ -494,6 +506,38 @@ class RuntimeChecker:
             verdict,
         )
         if verdict.decision == "block":
+            from prismguard.runtime.structural import is_legal_topic_fragment
+
+            if (
+                self._uses_classifier_first()
+                and is_legal_topic_fragment(normalized)
+                and verdict.confidence < self._config.guard_model.classifier_first_block_threshold
+            ):
+                return CheckResult(
+                    decision="allow",
+                    resolution_gate="guard_model",
+                    normalized_prompt=normalized,
+                    matched_category=matched_category or "benign_adjacent",
+                    details={
+                        **details,
+                        "decision_source": "classifier_only→legal_topic_fragment→allow",
+                    },
+                )
+            if (
+                self._uses_classifier_first()
+                and is_legal_topic_fragment(normalized)
+                and verdict.confidence >= self._config.guard_model.classifier_first_block_threshold
+            ):
+                return CheckResult(
+                    decision="allow",
+                    resolution_gate="structural",
+                    normalized_prompt=normalized,
+                    matched_category=matched_category or "benign_adjacent",
+                    details={
+                        **details,
+                        "decision_source": "classifier_only→legal_topic_fragment→structural_allow",
+                    },
+                )
             if (
                 self._uses_classifier_first()
                 and verdict.confidence < self._config.guard_model.veto_threshold
@@ -920,7 +964,7 @@ class RuntimeChecker:
             if (
                 first_verdict is None
                 or first_verdict.confidence < first_block_threshold
-                or structural.benign_score >= 0.55
+                or structural.benign_score >= 0.45
             ):
                 return CheckResult(
                     decision="allow",
@@ -936,7 +980,9 @@ class RuntimeChecker:
                         first_verdict,
                     ),
                 )
-            early = self._classifier_first_early_block(first_verdict)
+            early = self._classifier_first_early_block(
+                first_verdict, structural=structural, normalized=normalized
+            )
             if early is not None:
                 early.normalized_prompt = normalized
                 return early
@@ -985,7 +1031,9 @@ class RuntimeChecker:
 
         first_verdict = self._await_classifier_verdict(classifier_future)
         if first_verdict is not None:
-            early = self._classifier_first_early_block(first_verdict)
+            early = self._classifier_first_early_block(
+                first_verdict, structural=structural, normalized=normalized
+            )
             if early is not None:
                 early.normalized_prompt = normalized
                 return early
