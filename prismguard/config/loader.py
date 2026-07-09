@@ -43,6 +43,8 @@ class StructuralConfig(BaseModel):
 
 
 class EmbeddingConfig(BaseModel):
+    """Corpus embedding path (MiniLM + ANN + fusion). When disabled, check() uses ONNX + rules only."""
+    corpus_path_enabled: bool = True
     chunk_overlap_ratio: float = 0.25
     suspicious_ngram_floor: float = 0.15
     prefer_transformer: bool = True
@@ -76,7 +78,7 @@ class JudgeConfig(BaseModel):
 
 class GuardModelConfig(BaseModel):
     enabled: bool = True
-    classifier_mode: Literal["first", "parallel", "gray_only"] = "parallel"
+    classifier_mode: Literal["first", "parallel", "gray_only", "hybrid"] = "parallel"
     artifact_id: str = "prism-pi-v1"
     artifact_path: str = ""
     uncertain_low: float = 0.35

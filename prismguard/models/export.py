@@ -109,6 +109,47 @@ def export_onnx_artifact(
     return artifact_dir
 
 
+def quantize_onnx_int8(
+    artifact_dir: Path,
+    *,
+    output_name: str = "model.int8.onnx",
+) -> Path:
+    """Dynamic INT8 weight quantization for faster CPU inference."""
+    onnx_path = artifact_dir / "model.onnx"
+    if not onnx_path.is_file():
+        raise FileNotFoundError(f"ONNX model not found at {onnx_path}")
+    try:
+        from onnxruntime.quantization import QuantType, quantize_dynamic
+    except ImportError as exc:
+        raise RuntimeError(
+            "INT8 quantization requires onnxruntime with quantization support"
+        ) from exc
+    out_path = artifact_dir / output_name
+    quantize_dynamic(
+        model_input=str(onnx_path),
+        model_output=str(out_path),
+        weight_type=QuantType.QUInt8,
+    )
+    return out_path
+
+
+def export_and_quantize(
+    *,
+    base_model: str,
+    artifact_id: str,
+    output_dir: Path | None = None,
+    max_length: int = DEFAULT_MAX_LENGTH,
+) -> tuple[Path, Path]:
+    artifact_dir = export_onnx_artifact(
+        base_model=base_model,
+        artifact_id=artifact_id,
+        output_dir=output_dir,
+        max_length=max_length,
+    )
+    int8_path = quantize_onnx_int8(artifact_dir)
+    return artifact_dir, int8_path
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Export PrismGuard Guard Model ONNX artifact")
     parser.add_argument(
@@ -127,9 +168,24 @@ def main(argv: list[str] | None = None) -> int:
         help="Override output directory (default: packaged artifacts/<artifact-id>)",
     )
     parser.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
+    parser.add_argument(
+        "--quantize-int8",
+        action="store_true",
+        help="Also emit model.int8.onnx via dynamic weight quantization",
+    )
     args = parser.parse_args(argv)
 
     output = Path(args.output_dir) if args.output_dir else None
+    if args.quantize_int8:
+        artifact_dir, int8_path = export_and_quantize(
+            base_model=args.base_model,
+            artifact_id=args.artifact_id,
+            output_dir=output,
+            max_length=args.max_length,
+        )
+        print(f"Exported ONNX artifact to {artifact_dir}")
+        print(f"Quantized INT8 model at {int8_path}")
+        return 0
     artifact_dir = export_onnx_artifact(
         base_model=args.base_model,
         artifact_id=args.artifact_id,

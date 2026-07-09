@@ -91,6 +91,10 @@ class ONNXPromptInjectionClassifier:
         uncertain_high: float,
     ) -> ONNXPromptInjectionClassifier:
         onnx_path = artifact_dir / "model.onnx"
+        if os.environ.get("PRISMGUARD_ONNX_INT8", "").strip().lower() in ("1", "true", "yes"):
+            int8_path = artifact_dir / "model.int8.onnx"
+            if int8_path.is_file():
+                onnx_path = int8_path
         tokenizer_path = artifact_dir / "tokenizer.json"
         if not onnx_path.is_file():
             raise FileNotFoundError(

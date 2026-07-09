@@ -3,9 +3,16 @@
 
 gray_zone_policy: escalate  # escalate | fail_open | fail_closed — requires Guard Model artifact
 
+embedding:
+  corpus_path_enabled: false  # skip MiniLM + ANN + fusion; ONNX + rules/structural only
+  chunk_overlap_ratio: 0.25
+  suspicious_ngram_floor: 0.15
+  prefer_transformer: true
+  model_name: sentence-transformers/all-MiniLM-L6-v2
+
 guard_model:
   enabled: true
-  classifier_mode: first  # first | parallel | gray_only — first = 100% classifier then layers
+  classifier_mode: first  # first | parallel | gray_only | hybrid — hybrid skips ONNX on tier1/structural blocks
   artifact_id: prism-pi-v1
   artifact_path: ""  # optional override; or set PRISMGUARD_GUARD_MODEL_PATH
   uncertain_low: 0.35
@@ -48,12 +55,6 @@ triage:
 structural:
   structural_block_threshold: 0.85
   structural_allow_threshold: 0.20
-
-embedding:
-  chunk_overlap_ratio: 0.25
-  suspicious_ngram_floor: 0.15
-  prefer_transformer: true
-  model_name: sentence-transformers/all-MiniLM-L6-v2
 
 routing:
   community_confidence_floor: 0.55

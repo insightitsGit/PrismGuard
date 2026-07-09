@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum
@@ -22,10 +23,11 @@ from prismguard.runtime.guard_model import GuardModel, GuardModelVerdict
 from prismguard.runtime.llm_judge import LLMJudge
 from prismguard.runtime.normalize import normalize_prompt
 from prismguard.runtime.session import SessionStore, create_session_store
+from prismguard.runtime.stage_profiler import StageProfiler
 from prismguard.runtime.structural import analyze_structural
 from prismguard.runtime.thresholds import resolve_thresholds
 from prismguard.storage.protocols import StorageBackend
-from prismguard.taxonomy.embedder import Embedder, create_embedder_from_config
+from prismguard.taxonomy.embedder import Embedder, HashEmbedder, create_embedder_from_config
 
 if TYPE_CHECKING:
     from prismguard.feedback.review import FeedbackReviewService
@@ -97,7 +99,7 @@ def guard_model_required(config: TriageConfig) -> bool:
     if not config.guard_model.enabled:
         return False
     return (
-        config.guard_model.classifier_mode in ("parallel", "first")
+        config.guard_model.classifier_mode in ("parallel", "first", "hybrid")
         or config.gray_zone_policy == "escalate"
     )
 
@@ -140,7 +142,12 @@ class RuntimeChecker:
         self._storage = storage
         self._engine = engine
         self._config = config or load_triage_config()
-        self._embedder = embedder or create_embedder_from_config(self._config)
+        if embedder is not None:
+            self._embedder = embedder
+        elif self._config.embedding.corpus_path_enabled:
+            self._embedder = create_embedder_from_config(self._config)
+        else:
+            self._embedder = HashEmbedder()
         self._guard_model = guard_model
         self._llm_judge = llm_judge
         self._feedback_review = feedback_review
@@ -156,17 +163,25 @@ class RuntimeChecker:
             raise ValueError(
                 "gray_zone_policy='escalate' requires a configured GuardModel at RuntimeChecker init"
             )
-        seed_texts: list[tuple[str, str]] = []
-        for category in storage.relational.list_categories():
-            for entry in storage.vector.list_seed_entries_by_category(category.slug):
-                if entry.raw_text:
-                    seed_texts.append((entry.raw_text, entry.category_slug))
-        self._graph_engine = TaxonomyGraphEngine.from_mapping(
-            mapping_dict=engine.mapping_dict,
-            embedder=self._embedder,
-            attack_categories=engine.attack_categories,
-            seed_texts=seed_texts[:800],
-        )
+        if self._config.embedding.corpus_path_enabled:
+            seed_texts: list[tuple[str, str]] = []
+            for category in storage.relational.list_categories():
+                for entry in storage.vector.list_seed_entries_by_category(category.slug):
+                    if entry.raw_text:
+                        seed_texts.append((entry.raw_text, entry.category_slug))
+            self._graph_engine = TaxonomyGraphEngine.from_mapping(
+                mapping_dict=engine.mapping_dict,
+                embedder=self._embedder,
+                attack_categories=engine.attack_categories,
+                seed_texts=seed_texts[:800],
+            )
+        else:
+            self._graph_engine = TaxonomyGraphEngine.from_mapping(
+                mapping_dict=engine.mapping_dict,
+                embedder=self._embedder,
+                attack_categories=engine.attack_categories,
+                seed_texts=[],
+            )
 
     @classmethod
     def from_storage(
@@ -183,27 +198,33 @@ class RuntimeChecker:
         tenant_lexicon: TenantLexicon | None = None,
     ) -> RuntimeChecker:
         engine = build_mapping_from_parsed_seed(parsed_seed)
-        emb = embedder or create_embedder_from_config(config)
+        config = config or load_triage_config()
+        if embedder is not None:
+            emb = embedder
+        elif config.embedding.corpus_path_enabled:
+            emb = create_embedder_from_config(config)
+        else:
+            emb = HashEmbedder()
         from prismguard.taxonomy.constants import CATEGORY_VECTOR_DIM
 
-        needs_embed = force_embed or any(
-            not (
-                e.embedding_semantic
-                and e.embedding_category
-                and len(e.embedding_category) == CATEGORY_VECTOR_DIM
+        if config.embedding.corpus_path_enabled:
+            needs_embed = force_embed or any(
+                not (
+                    e.embedding_semantic
+                    and e.embedding_category
+                    and len(e.embedding_category) == CATEGORY_VECTOR_DIM
+                )
+                for e in iter_all_seed_entries(storage)
             )
-            for e in iter_all_seed_entries(storage)
-        )
-        if needs_embed:
-            ingest_seed_vectors(storage, engine, emb, force=force_embed)
-        config = config or load_triage_config()
+            if needs_embed:
+                ingest_seed_vectors(storage, engine, emb, force=force_embed)
         if guard_model is None and guard_model_required(config):
             from prismguard.runtime.guard_model import create_guard_model
 
             guard_model = create_guard_model(config.guard_model)
         if guard_model is None and config.gray_zone_policy == "escalate":
             config = config.model_copy(update={"gray_zone_policy": "fail_closed"})
-        if guard_model is None and config.guard_model.classifier_mode in ("parallel", "first"):
+        if guard_model is None and config.guard_model.classifier_mode in ("parallel", "first", "hybrid"):
             config = config.model_copy(update={"guard_model": config.guard_model.model_copy(update={"classifier_mode": "gray_only"})})
         return cls(
             storage,
@@ -314,6 +335,13 @@ class RuntimeChecker:
             return 1.0
         return 0.5 if category_slug else 0.0
 
+    def _uses_classifier_hybrid(self) -> bool:
+        return (
+            self._config.guard_model.enabled
+            and self._config.guard_model.classifier_mode == "hybrid"
+            and self._guard_model is not None
+        )
+
     def _uses_classifier_first(self) -> bool:
         return (
             self._config.guard_model.enabled
@@ -321,11 +349,28 @@ class RuntimeChecker:
             and self._guard_model is not None
         )
 
+    def _uses_parallel_classifier(self) -> bool:
+        return (
+            self._config.guard_model.enabled
+            and self._config.guard_model.classifier_mode == "parallel"
+            and self._guard_model is not None
+        )
+
     def _start_classifier_async(self, prompt: str) -> Future[GuardModelVerdict] | None:
         """Start ONNX classifier without blocking (classifier-first mode)."""
+        if self._uses_classifier_hybrid():
+            return None
         if not self._uses_classifier_first():
             return None
         return self._classifier_executor.submit(self._guard_model.check, prompt)  # type: ignore[union-attr]
+
+    def _start_classifier_late(self, prompt: str) -> Future[GuardModelVerdict] | None:
+        """Hybrid/parallel: start classifier after rules/structural short-circuits."""
+        if self._guard_model is None:
+            return None
+        if not (self._uses_classifier_hybrid() or self._uses_parallel_classifier()):
+            return None
+        return self._classifier_executor.submit(self._guard_model.check, prompt)
 
     @staticmethod
     def _mark_classifier_invoked(details: dict) -> dict:
@@ -352,7 +397,11 @@ class RuntimeChecker:
     ) -> GuardModelVerdict | None:
         if future is None:
             return None
-        return future.result()
+        profiler = StageProfiler.current()
+        if profiler is None:
+            return future.result()
+        with profiler.section("classifier"):
+            return future.result()
 
     def _classifier_first_early_block(self, verdict: GuardModelVerdict) -> CheckResult | None:
         if verdict.decision != "block":
@@ -414,11 +463,70 @@ class RuntimeChecker:
             matched_category=matched_category,
         )
 
-    def _uses_parallel_classifier(self) -> bool:
-        return (
-            self._config.guard_model.enabled
-            and self._config.guard_model.classifier_mode == "parallel"
-            and self._guard_model is not None
+    def _resolve_classifier_only(
+        self,
+        *,
+        prompt: str,
+        normalized: str,
+        verdict: GuardModelVerdict | None,
+        matched_category: str | None = None,
+        extra_details: dict | None = None,
+    ) -> CheckResult:
+        """ONNX-only tail: no embed/ANN/fusion — classifier verdict + gray policy."""
+        if verdict is None and self._guard_model is not None:
+            verdict = self._guard_model.check(prompt)
+        base = dict(extra_details or {})
+        if verdict is None:
+            policy = self._config.gray_zone_policy
+            decision: Decision = "allow" if policy == "fail_open" else "block"
+            gate: ResolutionGate = "guard_model" if policy != "fail_open" else "fusion_allow"
+            return CheckResult(
+                decision=decision,
+                resolution_gate=gate,
+                normalized_prompt=normalized,
+                matched_category=matched_category,
+                details={**base, "decision_source": "classifier_only→no_model"},
+            )
+
+        details = self._attach_classifier_details(
+            {**base, "decision_source": "classifier_only_path"},
+            verdict,
+        )
+        if verdict.decision == "block":
+            if (
+                self._uses_classifier_first()
+                and verdict.confidence < self._config.guard_model.veto_threshold
+            ):
+                return CheckResult(
+                    decision="allow",
+                    resolution_gate="guard_model",
+                    normalized_prompt=normalized,
+                    matched_category=matched_category or "benign_adjacent",
+                    details={
+                        **details,
+                        "decision_source": "classifier_only→below_veto→allow",
+                    },
+                )
+            return CheckResult(
+                decision="block",
+                resolution_gate="guard_model",
+                normalized_prompt=normalized,
+                matched_category=matched_category,
+                details=details,
+            )
+        if verdict.decision == "allow":
+            return CheckResult(
+                decision="allow",
+                resolution_gate="guard_model_fast_allow",
+                normalized_prompt=normalized,
+                matched_category=matched_category or "benign_adjacent",
+                details=details,
+            )
+        return self._resolve_gray(
+            prompt=prompt,
+            normalized=normalized,
+            fusion_details=details,
+            matched_category=matched_category,
         )
 
     def _start_parallel_classifier(self, prompt: str) -> Future[GuardModelVerdict] | None:
@@ -508,6 +616,31 @@ class RuntimeChecker:
         fusion_details: dict,
         matched_category: str | None,
     ) -> CheckResult:
+        profiler = StageProfiler.current()
+        if profiler is not None:
+            with profiler.section("gray_resolve"):
+                return self._resolve_gray_body(
+                    prompt=prompt,
+                    normalized=normalized,
+                    fusion_details=fusion_details,
+                    matched_category=matched_category,
+                )
+        return self._resolve_gray_body(
+            prompt=prompt,
+            normalized=normalized,
+            fusion_details=fusion_details,
+            matched_category=matched_category,
+        )
+
+    def _resolve_gray_body(
+        self,
+        *,
+        prompt: str,
+        normalized: str,
+        fusion_details: dict,
+        matched_category: str | None,
+    ) -> CheckResult:
+        profiler = StageProfiler.current()
         policy = self._config.gray_zone_policy
         base_details = {
             **fusion_details,
@@ -538,7 +671,11 @@ class RuntimeChecker:
             guard_details = {**base_details, **{k: fusion_details[k] for k in fusion_details if k.startswith("guard_model") or k.startswith("classifier")}}
             guard_details["decision_source"] = "fusion_gray→parallel_classifier"
         else:
-            verdict = self._guard_model.check(prompt, context=fusion_details)  # type: ignore[union-attr]
+            if profiler is not None:
+                with profiler.section("classifier_gray"):
+                    verdict = self._guard_model.check(prompt, context=fusion_details)  # type: ignore[union-attr]
+            else:
+                verdict = self._guard_model.check(prompt, context=fusion_details)  # type: ignore[union-attr]
             guard_details = {
                 **base_details,
                 **self._classifier_details(verdict),
@@ -567,7 +704,11 @@ class RuntimeChecker:
                 "matched_category": matched_category,
                 "nearest_seed_examples": self._nearest_seed_examples(normalized, matched_category),
             }
-            judge = self._llm_judge.judge(prompt, context=judge_context)
+            if profiler is not None:
+                with profiler.section("judge"):
+                    judge = self._llm_judge.judge(prompt, context=judge_context)
+            else:
+                judge = self._llm_judge.judge(prompt, context=judge_context)
             if judge.details.get("circuit_breaker"):
                 self._judge_circuit_open = True
             final_decision: Decision = judge.decision
@@ -621,28 +762,59 @@ class RuntimeChecker:
         return result
 
     def check(self, prompt: str, *, session_id: str | None = None) -> CheckResult:
-        result = self._check_body(prompt, session_id=session_id)
-        if session_id:
-            self._session_store.record_turn(
-                session_id,
-                prompt=prompt,
-                normalized=result.normalized_prompt,
-                category_slug=result.matched_category,
-                attack_sim=result.attack_sim,
-                decision=result.decision,
-            )
-        return result
+        profiler = StageProfiler.begin()
+        wall_start = time.perf_counter()
+        try:
+            result = self._check_body(prompt, session_id=session_id)
+            if profiler is not None:
+                result.details = profiler.merge_details(result.details)
+                profiler.log_request(
+                    resolution_gate=result.resolution_gate,
+                    decision=result.decision,
+                    prompt=prompt,
+                    wall_ms=(time.perf_counter() - wall_start) * 1000,
+                )
+            if session_id:
+                self._session_store.record_turn(
+                    session_id,
+                    prompt=prompt,
+                    normalized=result.normalized_prompt,
+                    category_slug=result.matched_category,
+                    attack_sim=result.attack_sim,
+                    decision=result.decision,
+                )
+            return result
+        finally:
+            StageProfiler.end()
 
     def _check_body(self, prompt: str, *, session_id: str | None = None) -> CheckResult:
-        normalized = normalize_prompt(
-            prompt,
-            max_obfuscation_depth=self._config.normalization.max_obfuscation_depth,
-        )
+        profiler = StageProfiler.current()
+
+        if profiler is not None:
+            with profiler.section("normalize"):
+                normalized = normalize_prompt(
+                    prompt,
+                    max_obfuscation_depth=self._config.normalization.max_obfuscation_depth,
+                )
+        else:
+            normalized = normalize_prompt(
+                prompt,
+                max_obfuscation_depth=self._config.normalization.max_obfuscation_depth,
+            )
+
         session_score = self._session_store.escalation_score(session_id) if session_id else 0.0
 
-        classifier_future = self._start_classifier_async(prompt)
+        if profiler is not None:
+            with profiler.section("classifier_start"):
+                classifier_future = self._start_classifier_async(prompt)
+        else:
+            classifier_future = self._start_classifier_async(prompt)
 
-        tier1 = self._engine.match_tier1(normalized)
+        if profiler is not None:
+            with profiler.section("tier1"):
+                tier1 = self._engine.match_tier1(normalized)
+        else:
+            tier1 = self._engine.match_tier1(normalized)
         if tier1 is not None:
             return CheckResult(
                 decision="block",
@@ -656,25 +828,44 @@ class RuntimeChecker:
                 ),
             )
 
-        tenant_block = tenant_tier1_block(
-            normalized,
-            self._tenant_lexicon,
-            override_tokens=self._override_tokens,
-        )
+        if profiler is not None:
+            with profiler.section("tenant"):
+                tenant_block = tenant_tier1_block(
+                    normalized,
+                    self._tenant_lexicon,
+                    override_tokens=self._override_tokens,
+                )
+        else:
+            tenant_block = tenant_tier1_block(
+                normalized,
+                self._tenant_lexicon,
+                override_tokens=self._override_tokens,
+            )
         if tenant_block is not None:
             return CheckResult(
                 decision="block",
                 resolution_gate="tenant_context_rule",
                 matched_category="direct_instruction_override",
                 normalized_prompt=normalized,
-                details=self._attach_optional_classifier_details(tenant_block, classifier_future),
+                details=self._attach_optional_classifier_details(
+                    tenant_block,
+                    classifier_future,
+                ),
             )
 
-        structural = analyze_structural(
-            normalized,
-            block_threshold=self._config.structural.structural_block_threshold,
-            allow_threshold=self._config.structural.structural_allow_threshold,
-        )
+        if profiler is not None:
+            with profiler.section("structural"):
+                structural = analyze_structural(
+                    normalized,
+                    block_threshold=self._config.structural.structural_block_threshold,
+                    allow_threshold=self._config.structural.structural_allow_threshold,
+                )
+        else:
+            structural = analyze_structural(
+                normalized,
+                block_threshold=self._config.structural.structural_block_threshold,
+                allow_threshold=self._config.structural.structural_allow_threshold,
+            )
         if structural.decision == "block":
             return CheckResult(
                 decision="block",
@@ -688,6 +879,18 @@ class RuntimeChecker:
             )
 
         if structural.decision == "allow":
+            if self._uses_classifier_hybrid():
+                return CheckResult(
+                    decision="allow",
+                    resolution_gate="structural",
+                    matched_category="benign_adjacent",
+                    normalized_prompt=normalized,
+                    details={
+                        "structural": structural.details,
+                        "matched_pattern": structural.matched_pattern,
+                        "decision_source": "hybrid→structural_allow_skip_classifier",
+                    },
+                )
             first_verdict = self._await_classifier_verdict(classifier_future)
             first_block_threshold = self._config.guard_model.classifier_first_block_threshold
             if (
@@ -752,6 +955,8 @@ class RuntimeChecker:
             )
 
         if classifier_future is None:
+            classifier_future = self._start_classifier_late(prompt)
+        if classifier_future is None:
             classifier_future = self._start_parallel_classifier(prompt)
 
         first_verdict = self._await_classifier_verdict(classifier_future)
@@ -765,30 +970,64 @@ class RuntimeChecker:
                 fast_allow.normalized_prompt = normalized
                 return fast_allow
 
-        semantic = self._embedder.embed_semantic(normalized)
-        slug = self._engine.assign_category(normalized)
-        category_vec = self._engine.remap_category_vector(
-            normalized, semantic, category_slug=slug
-        )
+        if not self._config.embedding.corpus_path_enabled:
+            return self._resolve_classifier_only(
+                prompt=prompt,
+                normalized=normalized,
+                verdict=first_verdict,
+            )
+
+        if profiler is not None:
+            with profiler.section("embed"):
+                semantic = self._embedder.embed_semantic(normalized)
+            with profiler.section("category"):
+                slug = self._engine.assign_category(normalized)
+                category_vec = self._engine.remap_category_vector(
+                    normalized, semantic, category_slug=slug
+                )
+        else:
+            semantic = self._embedder.embed_semantic(normalized)
+            slug = self._engine.assign_category(normalized)
+            category_vec = self._engine.remap_category_vector(
+                normalized, semantic, category_slug=slug
+            )
 
         attack_slugs = list(self._engine.attack_categories)
         benign_slug = self._engine.benign_category
 
-        attack_hits = self._storage.vector.ann_search_semantic(
-            semantic,
-            category_slugs=attack_slugs,
-            top_k=5,
-        )
-        benign_hits = self._storage.vector.ann_search_semantic(
-            semantic,
-            category_slugs=[benign_slug],
-            top_k=3,
-        )
-        cat_hits = self._storage.vector.ann_search_category(
-            category_vec,
-            category_slugs=attack_slugs,
-            top_k=3,
-        )
+        if profiler is not None:
+            with profiler.section("ann_search"):
+                attack_hits = self._storage.vector.ann_search_semantic(
+                    semantic,
+                    category_slugs=attack_slugs,
+                    top_k=5,
+                )
+                benign_hits = self._storage.vector.ann_search_semantic(
+                    semantic,
+                    category_slugs=[benign_slug],
+                    top_k=3,
+                )
+                cat_hits = self._storage.vector.ann_search_category(
+                    category_vec,
+                    category_slugs=attack_slugs,
+                    top_k=3,
+                )
+        else:
+            attack_hits = self._storage.vector.ann_search_semantic(
+                semantic,
+                category_slugs=attack_slugs,
+                top_k=5,
+            )
+            benign_hits = self._storage.vector.ann_search_semantic(
+                semantic,
+                category_slugs=[benign_slug],
+                top_k=3,
+            )
+            cat_hits = self._storage.vector.ann_search_category(
+                category_vec,
+                category_slugs=attack_slugs,
+                top_k=3,
+            )
 
         attack_sim = max((h.score for h in attack_hits), default=0.0)
         cat_sim = max((h.score for h in cat_hits), default=0.0)
@@ -850,12 +1089,21 @@ class RuntimeChecker:
 
         top_hit = attack_hits[0] if attack_hits else None
         rule_matched = bool(slug and slug in self._engine.attack_categories)
-        graph_score = self._graph_connectivity_score(normalized, matched_category)
-        community_confidence = self._community_confidence(
-            semantic,
-            matched_category,
-            rule_matched=rule_matched,
-        )
+        if profiler is not None:
+            with profiler.section("graph"):
+                graph_score = self._graph_connectivity_score(normalized, matched_category)
+                community_confidence = self._community_confidence(
+                    semantic,
+                    matched_category,
+                    rule_matched=rule_matched,
+                )
+        else:
+            graph_score = self._graph_connectivity_score(normalized, matched_category)
+            community_confidence = self._community_confidence(
+                semantic,
+                matched_category,
+                rule_matched=rule_matched,
+            )
 
         if top_hit and top_hit.score >= thresholds.corpus_match_threshold:
             return CheckResult(
@@ -879,25 +1127,47 @@ class RuntimeChecker:
         classifier_verdict = first_verdict
         classifier_prob = self._fusion_classifier_prob(classifier_verdict)
 
-        fusion = fuse_signals(
-            attack_sim=attack_sim,
-            benign_sim=benign_sim,
-            rule_matched=rule_matched,
-            severity=top_hit.severity if top_hit else "medium",
-            graph_score=graph_score,
-            community_confidence=community_confidence,
-            classifier_prob=classifier_prob,
-            w_sim=cfg.fusion.w_sim,
-            w_graph=cfg.fusion.w_graph,
-            w_rule=cfg.fusion.w_rule,
-            w_sev=cfg.fusion.w_sev,
-            w_comm=cfg.fusion.w_comm,
-            w_clf=cfg.fusion.w_clf if classifier_prob is not None else 0.0,
-            w_benign=cfg.fusion.w_benign,
-            w_session=cfg.fusion.w_session,
-            session_escalation_score=session_score,
-            weak_signal_floor=cfg.fusion.weak_signal_floor,
-        )
+        if profiler is not None:
+            with profiler.section("fusion"):
+                fusion = fuse_signals(
+                    attack_sim=attack_sim,
+                    benign_sim=benign_sim,
+                    rule_matched=rule_matched,
+                    severity=top_hit.severity if top_hit else "medium",
+                    graph_score=graph_score,
+                    community_confidence=community_confidence,
+                    classifier_prob=classifier_prob,
+                    w_sim=cfg.fusion.w_sim,
+                    w_graph=cfg.fusion.w_graph,
+                    w_rule=cfg.fusion.w_rule,
+                    w_sev=cfg.fusion.w_sev,
+                    w_comm=cfg.fusion.w_comm,
+                    w_clf=cfg.fusion.w_clf if classifier_prob is not None else 0.0,
+                    w_benign=cfg.fusion.w_benign,
+                    w_session=cfg.fusion.w_session,
+                    session_escalation_score=session_score,
+                    weak_signal_floor=cfg.fusion.weak_signal_floor,
+                )
+        else:
+            fusion = fuse_signals(
+                attack_sim=attack_sim,
+                benign_sim=benign_sim,
+                rule_matched=rule_matched,
+                severity=top_hit.severity if top_hit else "medium",
+                graph_score=graph_score,
+                community_confidence=community_confidence,
+                classifier_prob=classifier_prob,
+                w_sim=cfg.fusion.w_sim,
+                w_graph=cfg.fusion.w_graph,
+                w_rule=cfg.fusion.w_rule,
+                w_sev=cfg.fusion.w_sev,
+                w_comm=cfg.fusion.w_comm,
+                w_clf=cfg.fusion.w_clf if classifier_prob is not None else 0.0,
+                w_benign=cfg.fusion.w_benign,
+                w_session=cfg.fusion.w_session,
+                session_escalation_score=session_score,
+                weak_signal_floor=cfg.fusion.weak_signal_floor,
+            )
 
         fusion_details = {
             "session_id": session_id,
