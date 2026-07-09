@@ -82,7 +82,12 @@ class PrismGuardGate:
 
         domain = __import__("os").environ.get("PRISMGUARD_DOMAIN", "law")
         config = load_triage_config(domain=domain).model_copy(update={"gray_zone_policy": gray_zone_policy})
-        embedder = create_embedder_from_config(config)
+        if config.embedding.corpus_path_enabled:
+            embedder = create_embedder_from_config(config)
+        else:
+            from prismguard.taxonomy.embedder import HashEmbedder
+
+            embedder = HashEmbedder()
         guard_model = None
         llm_judge = None
         if gray_zone_policy == "escalate":

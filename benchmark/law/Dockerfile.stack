@@ -12,11 +12,15 @@ ARG MAX_TRAIN_EXAMPLES=8000
 RUN pip install -U pip setuptools wheel \
     && pip install -e ".[${EXTRAS}]"
 
-# Bake PrismGuard ONNX artifact when guard-model extra is requested (CPL/LPL stacks).
+# Use pre-built ONNX artifact when present; train only if missing (CPL/LPL stacks).
 RUN if echo "${EXTRAS}" | grep -q guard-model; then \
-      pip install -e ".[train,seed]" \
-      && python -m prismguard.models.cli train --profile full --artifact-id prism-pi-v1 \
-         --epochs 1 --batch-size 16 --max-length 256 --max-train-examples ${MAX_TRAIN_EXAMPLES}; \
+      if [ ! -f prismguard/models/artifacts/prism-pi-v1/model.onnx ]; then \
+        pip install -e ".[train,seed]" \
+        && python -m prismguard.models.cli train --profile full --artifact-id prism-pi-v1 \
+           --epochs 1 --batch-size 16 --max-length 256 --max-train-examples ${MAX_TRAIN_EXAMPLES}; \
+      else \
+        echo "Using pre-built prism-pi-v1 ONNX artifact"; \
+      fi; \
     fi
 
 ARG STACK=cpl

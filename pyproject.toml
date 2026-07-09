@@ -107,6 +107,7 @@ all = [
 prismguard = "prismguard.app_cli:main"
 prismguard-seed = "prismguard.cli:main"
 prismguard-model = "prismguard.models.cli:main"
+prismguard-profile = "prismguard.tools.profile_pipeline:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

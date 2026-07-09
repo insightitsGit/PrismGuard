@@ -183,7 +183,11 @@ def main() -> None:
     )
     from benchmark.law.compare_law import compare_law, write_comparison_report
 
-    comparison = compare_law(args.output_dir)
+    comparison = compare_law(args.output_dir, domain="law")
+    comparison["harness"] = {
+        "mode": "docker_http",
+        "latency_primary_field": "request_latency_ms",
+    }
     write_comparison_report(args.output_dir, comparison)
 
 

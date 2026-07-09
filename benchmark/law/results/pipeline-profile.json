@@ -1,0 +1,125 @@
+{
+  "requests": 43,
+  "wall_ms": {
+    "n": 43,
+    "mean": 314.54,
+    "p95": 536.19
+  },
+  "buckets": {
+    "classifier": {
+      "n": 43,
+      "mean": 314.27,
+      "p95": 535.95
+    },
+    "gray_escalation": {
+      "n": 3,
+      "mean": 1.02,
+      "p95": 0.99
+    },
+    "judge": {
+      "n": 3,
+      "mean": 0.51,
+      "p95": 0.49
+    },
+    "normalize": {
+      "n": 43,
+      "mean": 0.01,
+      "p95": 0.01
+    },
+    "rules": {
+      "n": 43,
+      "mean": 0.02,
+      "p95": 0.02
+    },
+    "structural": {
+      "n": 39,
+      "mean": 0.09,
+      "p95": 0.12
+    }
+  },
+  "bucket_share_pct": {
+    "classifier": 99.5,
+    "gray_escalation": 0.3,
+    "judge": 0.2,
+    "structural": 0.0,
+    "rules": 0.0,
+    "normalize": 0.0
+  },
+  "raw_stages": {
+    "classifier": {
+      "n": 32,
+      "mean": 422.28,
+      "p95": 565.69
+    },
+    "classifier_start": {
+      "n": 43,
+      "mean": 0.02,
+      "p95": 0.02
+    },
+    "gray_resolve": {
+      "n": 3,
+      "mean": 1.02,
+      "p95": 0.99
+    },
+    "judge": {
+      "n": 3,
+      "mean": 0.51,
+      "p95": 0.49
+    },
+    "normalize": {
+      "n": 43,
+      "mean": 0.01,
+      "p95": 0.01
+    },
+    "structural": {
+      "n": 39,
+      "mean": 0.09,
+      "p95": 0.12
+    },
+    "tenant": {
+      "n": 39,
+      "mean": 0.0,
+      "p95": 0.0
+    },
+    "tier1": {
+      "n": 43,
+      "mean": 0.02,
+      "p95": 0.02
+    }
+  },
+  "by_resolution_gate": {
+    "guard_model": {
+      "n": 18,
+      "wall_ms_mean": 398.99,
+      "top_bucket": "classifier"
+    },
+    "guard_model_fast_allow": {
+      "n": 3,
+      "wall_ms_mean": 329.03,
+      "top_bucket": "classifier"
+    },
+    "guard_model_first": {
+      "n": 5,
+      "wall_ms_mean": 611.77,
+      "top_bucket": "classifier"
+    },
+    "llm_judge": {
+      "n": 3,
+      "wall_ms_mean": 368.4,
+      "top_bucket": "classifier"
+    },
+    "structural": {
+      "n": 10,
+      "wall_ms_mean": 119.19,
+      "top_bucket": "classifier"
+    },
+    "tier1_rule": {
+      "n": 4,
+      "wall_ms_mean": 0.06,
+      "top_bucket": "classifier"
+    }
+  },
+  "source": "benchmark\\law\\results\\verified\\cpl.jsonl",
+  "quick": true,
+  "llm_guard_wall_ms_mean": 85.85903999046423
+}

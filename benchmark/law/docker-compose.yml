@@ -12,7 +12,8 @@ services:
     environment:
       PORT: "8080"
       TOKENIZERS_PARALLELISM: "false"
-      UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
+      PRISMGUARD_DOMAIN: "law"
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-1}
       PRISMGUARD_ORT_INTRA_THREADS: ${PRISMGUARD_ORT_INTRA_THREADS:-2}
       PRISMGUARD_EMBED_CACHE_SIZE: ${PRISMGUARD_EMBED_CACHE_SIZE:-512}
 
@@ -55,7 +56,8 @@ services:
     environment:
       PORT: "8080"
       TOKENIZERS_PARALLELISM: "false"
-      UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
+      PRISMGUARD_DOMAIN: "law"
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-1}
       PRISMGUARD_ORT_INTRA_THREADS: ${PRISMGUARD_ORT_INTRA_THREADS:-2}
       PRISMGUARD_EMBED_CACHE_SIZE: ${PRISMGUARD_EMBED_CACHE_SIZE:-512}
 
@@ -74,7 +76,7 @@ services:
       TARGET_LGL: http://lgl:8080
       TARGET_LPL: http://lpl:8080
     volumes:
-      - ./results/latest:/results
+      - ./results/docker-verified:/results
     command:
       [
         "python",

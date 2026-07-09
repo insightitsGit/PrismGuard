@@ -1,0 +1,128 @@
+{
+  "onnx": {
+    "blocks": 12,
+    "n": 14,
+    "rate": 0.8571428571428571,
+    "rows": [
+      {
+        "decision": "allow",
+        "confidence": 0.41306959229266055,
+        "verdict": "uncertain"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.8033167456937585,
+        "verdict": "block"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.9301589010214436,
+        "verdict": "block"
+      },
+      {
+        "decision": "allow",
+        "confidence": 0.44464538367311046,
+        "verdict": "uncertain"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.8966908303907173,
+        "verdict": "block"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.6679246007432713,
+        "verdict": "block"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.8536709209759978,
+        "verdict": "block"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.9312886199278904,
+        "verdict": "block"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.723664748049082,
+        "verdict": "block"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.9259228719559797,
+        "verdict": "block"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.8358519262693952,
+        "verdict": "block"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.900198997445733,
+        "verdict": "block"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.7869098923921188,
+        "verdict": "block"
+      },
+      {
+        "decision": "block",
+        "confidence": 0.925789074656195,
+        "verdict": "block"
+      }
+    ]
+  },
+  "llm_guard": {
+    "blocks": 9,
+    "n": 14,
+    "rate": 0.6428571428571429,
+    "rows": [
+      {
+        "decision": "allow"
+      },
+      {
+        "decision": "block"
+      },
+      {
+        "decision": "block"
+      },
+      {
+        "decision": "allow"
+      },
+      {
+        "decision": "block"
+      },
+      {
+        "decision": "allow"
+      },
+      {
+        "decision": "block"
+      },
+      {
+        "decision": "block"
+      },
+      {
+        "decision": "allow"
+      },
+      {
+        "decision": "block"
+      },
+      {
+        "decision": "allow"
+      },
+      {
+        "decision": "block"
+      },
+      {
+        "decision": "block"
+      },
+      {
+        "decision": "block"
+      }
+    ]
+  }
+}
