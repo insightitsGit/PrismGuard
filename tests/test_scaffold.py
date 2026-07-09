@@ -2,4 +2,4 @@ import prismguard
 
 
 def test_version() -> None:
-    assert prismguard.__version__ == "0.1.5"
+    assert prismguard.__version__ == "0.1.6"

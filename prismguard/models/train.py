@@ -24,7 +24,7 @@ from prismguard.models.corpus import (
     TrainingExample,
     build_training_corpus,
     corpus_manifest,
-    default_law_training_paths,
+    default_domain_training_paths,
     oversample_thin_categories,
     subsample_training_examples,
     write_corpus_manifest,
@@ -47,6 +47,8 @@ class TrainOptions:
     fit_calibration: bool = True
     uncertain_low: float = 0.35
     uncertain_high: float = 0.65
+    normal_txt: Path | None = None
+    normal_yaml: Path | None = None
 
 
 def _holdout_attack_rows(domain: str) -> list[dict[str, str]]:
@@ -55,10 +57,15 @@ def _holdout_attack_rows(domain: str) -> list[dict[str, str]]:
     return [row for row in _holdout_rows(domain) if row["traffic_kind"] == "attack"]
 
 
-def _normal_rows() -> list[dict[str, str]]:
-    from prismguard.models.eval import _normal_rows
+def _normal_rows(
+    domain: str = "law",
+    *,
+    normal_txt: Path | None = None,
+    normal_yaml: Path | None = None,
+) -> list[dict[str, str]]:
+    from prismguard.models.eval import _normal_rows as eval_normals
 
-    return _normal_rows()
+    return eval_normals(domain, normal_txt=normal_txt, normal_yaml=normal_yaml)
 
 
 def _injection_probability(
@@ -96,9 +103,11 @@ def evaluate_holdout_classifier(
     domain: str = "law",
     uncertain_low: float = 0.35,
     uncertain_high: float = 0.65,
+    normal_txt: Path | None = None,
+    normal_yaml: Path | None = None,
 ) -> dict[str, float]:
     attacks = _holdout_attack_rows(domain)
-    normals = _normal_rows()
+    normals = _normal_rows(domain, normal_txt=normal_txt, normal_yaml=normal_yaml)
     blocked = 0
     for row in attacks:
         prob = _injection_probability(model, tokenizer, device, row["text"], max_length=max_length)
@@ -313,6 +322,8 @@ def train_and_export(
                 domain=opts.holdout_domain,
                 uncertain_low=opts.uncertain_low,
                 uncertain_high=opts.uncertain_high,
+                normal_txt=opts.normal_txt,
+                normal_yaml=opts.normal_yaml,
             )
             score = (
                 holdout["holdout_block_rate"]
@@ -359,6 +370,8 @@ def train_and_export(
         domain=opts.holdout_domain,
         uncertain_low=opts.uncertain_low,
         uncertain_high=opts.uncertain_high,
+        normal_txt=opts.normal_txt,
+        normal_yaml=opts.normal_yaml,
     )
 
     metrics = {
@@ -406,6 +419,8 @@ def train_and_export(
                 domain=opts.holdout_domain,
                 uncertain_low=opts.uncertain_low,
                 uncertain_high=opts.uncertain_high,
+                normal_txt=opts.normal_txt,
+                normal_yaml=opts.normal_yaml,
             )
             metrics["calibration_temperature"] = calibration_temperature
             metrics["holdout_block_rate_calibrated"] = holdout_after["holdout_block_rate"]
@@ -544,23 +559,41 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--law-pack",
         action="store_true",
-        help="Include law overlay YAML + augment/hard-negative JSONL (never holdout).",
+        help="Alias for --domain-pack law (opt-in; default train uses bundled seed only).",
+    )
+    parser.add_argument(
+        "--domain-pack",
+        default="",
+        choices=["", "law", "healthcare", "finance", "general"],
+        help="Opt-in domain overlay + benchmark augment (default: none).",
     )
     parser.add_argument("--oversample-law", action="store_true", help="Oversample thin attack categories")
     parser.add_argument("--class-weighted", action="store_true", help="Balanced class weights in loss")
     parser.add_argument("--focal-loss", action="store_true", help="Focal loss for rare attack types")
     parser.add_argument("--holdout-early-stop", action="store_true", help="Checkpoint best holdout epoch")
-    parser.add_argument("--holdout-domain", default="law", choices=["law", "healthcare", "finance"])
+    parser.add_argument(
+        "--holdout-domain",
+        default="law",
+        choices=["law", "healthcare", "finance", "general"],
+        help="Holdout domain for early-stop / eval (default: law).",
+    )
+    parser.add_argument(
+        "--normal-txt",
+        default="",
+        help="Opt-in normal/FAQ allow suite (txt). Default: domain-specific normals.",
+    )
+    parser.add_argument("--normal-yaml", default="", help="Opt-in normal suite YAML")
     parser.add_argument("--no-calibration", action="store_true", help="Skip temperature scaling artifact")
     parser.add_argument("--output-dir", default="")
     args = parser.parse_args(argv)
 
     feedback_paths = [Path(p) for p in args.feedback_jsonl]
     seed_yaml_paths = [Path(p) for p in args.seed_yaml]
-    if args.law_pack:
-        law_seed, law_feedback = default_law_training_paths()
-        seed_yaml_paths.extend(law_seed)
-        feedback_paths.extend(law_feedback)
+    domain_pack = (args.domain_pack or "").strip() or ("law" if args.law_pack else "")
+    if domain_pack:
+        d_seed, d_feedback = default_domain_training_paths(domain_pack)
+        seed_yaml_paths.extend(d_seed)
+        feedback_paths.extend(d_feedback)
 
     examples, manifest = load_corpus_for_training(
         profile=args.profile,  # type: ignore[arg-type]
@@ -584,6 +617,8 @@ def main(argv: list[str] | None = None) -> int:
         holdout_early_stop=args.holdout_early_stop,
         holdout_domain=args.holdout_domain,
         fit_calibration=not args.no_calibration,
+        normal_txt=Path(args.normal_txt) if getattr(args, "normal_txt", "") else None,
+        normal_yaml=Path(args.normal_yaml) if getattr(args, "normal_yaml", "") else None,
     )
 
     output = Path(args.output_dir) if args.output_dir else None

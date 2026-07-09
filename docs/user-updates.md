@@ -9,7 +9,8 @@ PrismGuard improves through **packaged releases**, not by importing internal eva
 | Python library (`check`, structural rules, HTTP serve) | `pip install -U prismguard` | Upgrade package |
 | Bundled seed corpus | `prismguard init` or `prismguard-seed import --bundled --mode update` | Re-run init/update after upgrade |
 | Domain overlay | Opt-in: `PRISMGUARD_DOMAIN=law` (or `general`); unset = core only | `prismguard init --domain law` for legal pilots |
-| ONNX classifier (`prism-pi-v1`, law-bench-oriented) | Metadata in wheel; weights via `prismguard-model download`; **load only if** `PRISMGUARD_USE_ONNX=1` | Keep unset for hub/FAQ chat until `benchmark/hub/` gate is green |
+| ONNX classifier (`prism-pi-v1` default id, law-bench) | Metadata in wheel; weights via `prismguard-model download`; **load only if** `PRISMGUARD_USE_ONNX=1` | Hub/FAQ: train customer/hub artifact first, then set `PRISMGUARD_ARTIFACT_ID` / `PRISMGUARD_GUARD_MODEL_PATH` |
+| Customer feedback → retrain | Opt-in: `PRISMGUARD_FEEDBACK_PERSIST=1` → `prismguard feedback export` → `prismguard-model train --feedback-jsonl` | Seed import alone does **not** update ONNX weights |
 | Team/Business features | Signed license file | Renew license; set `PRISMGUARD_LICENSE_FILE` |
 
 ## What is **not** shipped into your runtime

@@ -17,7 +17,7 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 
 ✅ Self-hosted &nbsp;·&nbsp; ✅ Explainable decisions &nbsp;·&nbsp; ✅ ONNX local inference &nbsp;·&nbsp; ✅ Optional LLM Judge &nbsp;·&nbsp; ✅ Built for production
 
-[Quick install](#install) · [PyPI](https://pypi.org/project/prismguard/0.1.5/) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
+[Quick install](#install) · [PyPI](https://pypi.org/project/prismguard/0.1.6/) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
 
 ### Designed for
 
@@ -63,7 +63,7 @@ We complement the ecosystem — PrismGuard is the **firewall layer** when you ne
 ### Quick install (recommended)
 
 ```bash
-pip install "prismguard[prism,guard-model]==0.1.5"
+pip install "prismguard[prism,guard-model]==0.1.6"
 # Optional: ONNX weights (~705 MB). prism-pi-v1 is law-bench-oriented —
 # keep PRISMGUARD_USE_ONNX unset for general/hub chat until hub FAQ gate is green.
 prismguard-model download
@@ -73,7 +73,7 @@ prismguard-model download
 # export PRISMGUARD_USE_ONNX=1
 ```
 
-From [PyPI](https://pypi.org/project/prismguard/0.1.5/) · [release notes](https://pypi.org/project/prismguard/0.1.5/)
+From [PyPI](https://pypi.org/project/prismguard/0.1.6/) · [release notes](https://pypi.org/project/prismguard/0.1.6/)
 
 Hub / product chat (recommended):
 
@@ -88,7 +88,7 @@ You're ready. Run `prismguard check "your prompt here"`.
 ### Minimal install
 
 ```bash
-pip install prismguard==0.1.5
+pip install prismguard==0.1.6
 ```
 
 Rules-only path — add `[prism,guard-model]` and run `prismguard-model download` for the ONNX classifier (opt-in via `PRISMGUARD_USE_ONNX=1`).
@@ -104,7 +104,14 @@ prismguard-model download
 Cached at `~/.cache/prismguard/artifacts/prism-pi-v1/` (Windows: `%USERPROFILE%\.cache\prismguard\...`).  
 Model asset: [GitHub Release v0.1.2](https://github.com/insightitsGit/PrismGuard/releases/tag/v0.1.2)
 
-**Honesty note:** `prism-pi-v1` is calibrated for **law-bench** traffic. General FAQ / marketing chat should use `web_chat` (rules) or shadow ONNX (`PRISMGUARD_SHADOW_ONNX=1`) until `benchmark/hub/` FP gates pass.
+**Honesty note:** `prism-pi-v1` is calibrated for **law-bench** traffic (default artifact id when ONNX is opted in). General FAQ / marketing chat should use `web_chat` (rules) or shadow ONNX until a **hub/customer** artifact passes gates, then:
+
+```bash
+export PRISMGUARD_USE_ONNX=1
+export PRISMGUARD_ARTIFACT_ID=prism-pi-hub-v1   # or PRISMGUARD_GUARD_MODEL_PATH=...
+```
+
+Customer train loop (all **opt-in**): `PRISMGUARD_FEEDBACK_PERSIST=1` → `prismguard feedback export` → `prismguard-model train --domain-pack general --feedback-jsonl …`. See [docs/integration-guide.md](docs/integration-guide.md).
 
 Air-gapped or mirror:
 
@@ -232,7 +239,7 @@ Yes. Tier-1 rules, seed corpus imports, domain overlays, and tenant lexicons ext
 
 - [x] Law domain pack (verified)
 - [x] ONNX classifier (`prism-pi-v1`)
-- [x] PyPI release ([0.1.5](https://pypi.org/project/prismguard/0.1.5/))
+- [x] PyPI release ([0.1.6](https://pypi.org/project/prismguard/0.1.6/))
 - [x] HTTP API (`prismguard serve`)
 - [x] ChorusGraph integration
 - [ ] Healthcare validation

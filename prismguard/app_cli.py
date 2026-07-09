@@ -364,6 +364,23 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Config checks only (no ONNX runtime probes)",
     )
 
+    # Opt-in customer/pilot training loop (default: unused until feedback persist is enabled).
+    fb_cmd = sub.add_parser(
+        "feedback",
+        help="Export reviewed feedback for ONNX training (opt-in; default unused)",
+    )
+    fb_sub = fb_cmd.add_subparsers(dest="feedback_command", required=True)
+    fb_export = fb_sub.add_parser("export", help="Export training JSONL (approved blocks by default)")
+    fb_export.add_argument("--output", "-o", required=True)
+    fb_export.add_argument(
+        "--include-calibration-allows",
+        action="store_true",
+        help="Also export calibration allows (default: off)",
+    )
+    fb_export.add_argument("--calibration-only", action="store_true")
+    fb_export.add_argument("--store", default="")
+    fb_export.add_argument("--backend", default=None)
+
     return parser
 
 
@@ -397,6 +414,10 @@ def main(argv: list[str] | None = None) -> None:
             print(format_report(report))
             raise SystemExit(0 if report.ok else 1)
         parser.error(f"Unknown eval command {args.eval_command!r}")
+    if args.command == "feedback":
+        from prismguard.feedback.cli import cmd_export
+
+        raise SystemExit(cmd_export(args))
     parser.error(f"Unknown command {args.command!r}")
 
 

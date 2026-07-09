@@ -85,3 +85,67 @@ def test_feedback_export_training_jsonl(tmp_path: Path) -> None:
     assert count == 1
     payload = json.loads(out.read_text(encoding="utf-8").strip())
     assert payload["decision"] == "block"
+
+
+def test_feedback_cli_export_default_approved_only(tmp_path: Path, monkeypatch) -> None:
+    """CLI export is opt-in; default includes approved blocks, not calibration."""
+    from prismguard.feedback.cli import cmd_export
+    from types import SimpleNamespace
+
+    store = tmp_path / "feedback.json"
+    monkeypatch.setenv("PRISMGUARD_FEEDBACK_PERSIST", "1")
+    monkeypatch.setenv("PRISMGUARD_FEEDBACK_PATH", str(store))
+    storage = create_storage("memory")
+    review = FeedbackReviewService(storage, store_path=store)
+    result = CheckResult(
+        decision="block",
+        resolution_gate="tier1_rule",
+        matched_category="direct_instruction_override",
+        normalized_prompt="x",
+        details={},
+    )
+    item = review.enqueue_block(
+        prompt="cli export attack",
+        check_result=result,
+        origin="guard_model",
+        category_slug="direct_instruction_override",
+    )
+    review.approve_block(item.id, reviewer="qa")
+    out = tmp_path / "out.jsonl"
+    code = cmd_export(
+        SimpleNamespace(
+            output=str(out),
+            include_calibration_allows=False,
+            calibration_only=False,
+            store=str(store),
+            backend="memory",
+        )
+    )
+    assert code == 0
+    assert "cli export attack" in out.read_text(encoding="utf-8")
+
+
+def test_default_domain_training_paths_general_opt_in() -> None:
+    from prismguard.models.corpus import default_domain_training_paths, plan_training_corpus
+
+    seed, fb = default_domain_training_paths("general")
+    assert any("hub_attacks" in str(p) for p in seed)
+    assert any("hub_benign" in str(p) for p in fb)
+
+    # Default plan: no domain pack
+    plan = plan_training_corpus(profile="authored", domain_pack=None)
+    assert plan["domain_pack"] is None
+    assert plan["total_examples"] > 0
+
+    plan_g = plan_training_corpus(profile="authored", domain_pack="general")
+    assert plan_g["domain_pack"] == "general"
+    assert plan_g["total_examples"] >= plan["total_examples"]
+
+
+def test_eval_holdout_general_schema() -> None:
+    from prismguard.models.eval import _holdout_rows, _normal_rows
+
+    rows = _holdout_rows("general")
+    assert any(r["traffic_kind"] == "attack" for r in rows)
+    normals = _normal_rows("general")
+    assert any("Hi" in r["text"] or "pricing" in r["text"].lower() for r in normals) or len(normals) >= 4

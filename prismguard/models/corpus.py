@@ -283,16 +283,109 @@ def oversample_thin_categories(
 
 def default_law_training_paths() -> tuple[list[Path], list[Path]]:
     """Law overlay YAML + augment/hard-negative JSONL (never holdout)."""
-    root = Path("benchmark/law/data")
-    seed_yaml = [
-        root / "legal_attacks.yaml",
-        root / "synthetic_attacks.yaml",
-    ]
-    feedback_jsonl = [
-        root / "law_training_augment.jsonl",
-        root / "law_benign_hard_negatives.jsonl",
-    ]
-    return seed_yaml, [path for path in feedback_jsonl if path.is_file()]
+    return default_domain_training_paths("law")
+
+
+def default_domain_training_paths(domain: str) -> tuple[list[Path], list[Path]]:
+    """
+    Domain pack overlay + optional benchmark/<domain>/data augment files.
+
+    Opt-in via ``--domain-pack`` / ``--law-pack``. Default train uses bundled seed only.
+    Never includes holdout YAML.
+    """
+    key = domain.strip().lower()
+    seed_yaml: list[Path] = []
+    feedback_jsonl: list[Path] = []
+
+    try:
+        from prismguard.domains.registry import get_domain_pack
+
+        pack = get_domain_pack(key)
+        if pack.overlay_path.is_file():
+            seed_yaml.append(pack.overlay_path)
+    except ValueError:
+        pass
+
+    root = Path("benchmark") / key / "data"
+    if key == "law":
+        seed_yaml.extend(
+            [
+                root / "legal_attacks.yaml",
+                root / "synthetic_attacks.yaml",
+            ]
+        )
+        feedback_jsonl.extend(
+            [
+                root / "law_training_augment.jsonl",
+                root / "law_benign_hard_negatives.jsonl",
+            ]
+        )
+    elif key == "general":
+        hub_root = Path("benchmark/hub/training")
+        seed_yaml.append(hub_root / "hub_attacks.yaml")
+        feedback_jsonl.append(hub_root / "hub_benign_hard_negatives.jsonl")
+    else:
+        # healthcare / finance: overlay already added; optional benchmark data if present
+        for name in ("training_augment.jsonl", "benign_hard_negatives.jsonl"):
+            feedback_jsonl.append(root / name)
+        for name in ("attacks.yaml", "synthetic_attacks.yaml"):
+            seed_yaml.append(root / name)
+
+    return (
+        [p for p in seed_yaml if p.is_file()],
+        [p for p in feedback_jsonl if p.is_file()],
+    )
+
+
+def plan_training_corpus(
+    *,
+    profile: str = "full",
+    feedback_paths: list[Path] | None = None,
+    seed_yaml_paths: list[Path] | None = None,
+    domain_pack: str | None = None,
+    from_storage: bool = False,
+    holdout_domain: str = "law",
+    normal_txt: Path | None = None,
+    normal_yaml: Path | None = None,
+) -> dict:
+    """Dry-run plan for customer/hub training (no train). Defaults: no domain pack."""
+    from prismguard.models.train import load_corpus_for_training
+
+    seed_paths = list(seed_yaml_paths or [])
+    fb_paths = list(feedback_paths or [])
+    if domain_pack:
+        d_seed, d_fb = default_domain_training_paths(domain_pack)
+        seed_paths.extend(d_seed)
+        fb_paths.extend(d_fb)
+
+    examples, manifest = load_corpus_for_training(
+        profile=profile,  # type: ignore[arg-type]
+        feedback_paths=fb_paths,
+        seed_yaml_paths=seed_paths,
+        from_storage=from_storage,
+    )
+    normal_suite = "law_normal_scenarios"
+    if normal_txt is not None:
+        normal_suite = str(normal_txt)
+    elif normal_yaml is not None:
+        normal_suite = str(normal_yaml)
+    elif holdout_domain != "law":
+        normal_suite = f"domain:{holdout_domain}:holdout_benign"
+
+    return {
+        "profile": profile,
+        "domain_pack": domain_pack or None,
+        "holdout_domain": holdout_domain,
+        "normal_suite": normal_suite,
+        "seed_yaml": [str(p) for p in seed_paths],
+        "feedback_jsonl": [str(p) for p in fb_paths],
+        "from_storage": from_storage,
+        "total_examples": manifest.total_examples,
+        "injection_examples": sum(1 for e in examples if e.label == 1),
+        "benign_examples": sum(1 for e in examples if e.label == 0),
+        "fingerprint": manifest.fingerprint,
+        "sources": dict(manifest.sources),
+    }
 
 
 def subsample_training_examples(

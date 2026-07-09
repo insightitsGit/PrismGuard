@@ -160,11 +160,20 @@ Two learning loops:
 
 ### 5. Recommended training workflow
 
+**Defaults:** `prismguard-model train` uses the **bundled seed only**. Domain packs (`--domain-pack law|general|…`) and customer feedback are **opt-in**.
+
 1. **Bootstrap** — `prismguard-model export` from ProtectAI DeBERTa (baseline, no training).
-2. **Domain fine-tune** — `prismguard-model train --epochs 2 --base-model distilbert-base-uncased` on bundled + legal overlay exports.
-3. **Evaluate** — run `benchmark.law` holdout; compare CPL vs CGL.
-4. **Iterate** — export feedback JSONL monthly; train `prism-pi-v2`; bump `artifact_id` in config.
-5. **Distill (optional)** — use LLM Judge verdicts on uncertain cases as silver labels for training when human review volume is low.
+2. **Law proof (opt-in pack)** — `prismguard-model train --law-pack` (alias for `--domain-pack law`) → `prism-pi-v1` style artifact; eval `--domain law`.
+3. **Customer / hub (opt-in)** — pilot with `PRISMGUARD_FEEDBACK_PERSIST=1` + optional `PRISMGUARD_SHADOW_ONNX=1` → `prismguard feedback export` → `train --feedback-jsonl … --domain-pack general --normal-txt benchmark/hub/benign_faq.txt`.
+4. **Plan first** — `prismguard-model corpus-plan` (dry-run sources/fingerprint; no train).
+5. **Evaluate** — `prismguard-model eval --domain general|law` with matching `--normal-txt` when needed.
+6. **Enforce** — only after gates: `PRISMGUARD_USE_ONNX=1` + `PRISMGUARD_ARTIFACT_ID` / `PRISMGUARD_GUARD_MODEL_PATH`.
+
+| Readiness | Artifact | When to enable |
+|-----------|----------|----------------|
+| Law proof | `prism-pi-v1` (default id) | Legal pilots after law holdout green |
+| Hub / general | `prism-pi-hub-v1` or `customer-pi-v1` | After hub FAQ allow + attack holdout gates |
+| Production default | ONNX **off** | Rules / `web_chat` until you opt in |
 
 ### 6. Feedback JSONL format
 

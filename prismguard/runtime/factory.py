@@ -195,7 +195,20 @@ def _build_full_checker(
     want_onnx = onnx_opt_in() if use_onnx is None else use_onnx
     guard_model = None
     if want_onnx and cfg.guard_model.enabled:
-        guard_model = create_guard_model(cfg.guard_model)
+        # Opt-in artifact selection (default remains triage.yaml / prism-pi-v1).
+        # Set PRISMGUARD_ARTIFACT_ID=prism-pi-hub-v1 (or customer id) after gates pass.
+        artifact_id = os.environ.get("PRISMGUARD_ARTIFACT_ID", "").strip()
+        artifact_path = os.environ.get("PRISMGUARD_GUARD_MODEL_PATH", "").strip()
+        gm_cfg = cfg.guard_model
+        updates: dict[str, str] = {}
+        if artifact_id:
+            updates["artifact_id"] = artifact_id
+        if artifact_path:
+            updates["artifact_path"] = artifact_path
+        if updates:
+            gm_cfg = gm_cfg.model_copy(update=updates)
+            cfg = cfg.model_copy(update={"guard_model": gm_cfg})
+        guard_model = create_guard_model(gm_cfg)
     elif not want_onnx:
         # Prevent RuntimeChecker.from_storage from surprise-loading ONNX.
         cfg = cfg.model_copy(
@@ -222,6 +235,13 @@ def _build_full_checker(
     if shadow_onnx and cfg.gray_zone_policy == "escalate":
         cfg = cfg.model_copy(update={"gray_zone_policy": "fail_open"})
 
+    feedback_review = None
+    # Opt-in: PRISMGUARD_FEEDBACK_PERSIST=1 wires review queue (default off).
+    if env_flag("PRISMGUARD_FEEDBACK_PERSIST", default=False):
+        from prismguard.feedback.review import FeedbackReviewService
+
+        feedback_review = FeedbackReviewService(storage)
+
     checker = RuntimeChecker.from_storage(
         storage,
         parsed,
@@ -229,6 +249,7 @@ def _build_full_checker(
         config=cfg,
         guard_model=enforce_model,
         llm_judge=enforce_judge,
+        feedback_review=feedback_review,
     )
     if shadow_onnx and want_onnx:
         return _ShadowOnnxChecker(checker, domain=domain or "law")

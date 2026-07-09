@@ -13,7 +13,8 @@ from prismguard.config.loader import GuardModelConfig, load_triage_config
 from prismguard.models.loader import load_corpus_manifest
 from prismguard.runtime.guard_model import GuardModel, create_guard_model
 
-DomainName = Literal["law", "healthcare", "finance"]
+DomainName = Literal["law", "healthcare", "finance", "general"]
+DOMAIN_CHOICES = ("law", "healthcare", "finance", "general")
 
 
 @dataclass(frozen=True)
@@ -43,22 +44,96 @@ def _holdout_rows(domain: str) -> list[dict[str, str]]:
     if holdout_path is None or not holdout_path.is_file():
         return []
     with holdout_path.open(encoding="utf-8") as handle:
-        raw = yaml.safe_load(handle)
+        raw = yaml.safe_load(handle) or {}
     rows: list[dict[str, str]] = []
+    # Standard entries schema (law / general)
     for entry in raw.get("entries") or []:
         slug = entry.get("category_slug", "")
         kind = "attack" if slug != "benign_adjacent" else "benign_adjacent"
         rows.append({"text": entry["text"], "traffic_kind": kind, "category_slug": slug})
+    # Alternate attacks/benign schema
+    for entry in raw.get("attacks") or []:
+        text = entry.get("text") if isinstance(entry, dict) else str(entry)
+        rows.append(
+            {
+                "text": text,
+                "traffic_kind": "attack",
+                "category_slug": (entry.get("category_slug") if isinstance(entry, dict) else "")
+                or "direct_instruction_override",
+            }
+        )
+    for entry in raw.get("benign") or []:
+        text = entry.get("text") if isinstance(entry, dict) else str(entry)
+        rows.append(
+            {
+                "text": text,
+                "traffic_kind": "benign_adjacent",
+                "category_slug": "benign_adjacent",
+            }
+        )
     return rows
 
 
-def _normal_rows() -> list[dict[str, str]]:
-    from benchmark.law.shared.normal_scenarios import load_normal_scenarios
+def _normal_rows_from_txt(path: Path) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if not text or text.startswith("#"):
+            continue
+        rows.append({"text": text, "traffic_kind": "normal", "category_slug": "benign_adjacent"})
+    return rows
 
-    return [
-        {"text": s.text, "traffic_kind": "normal", "category_slug": s.category_hint}
-        for s in load_normal_scenarios()
-    ]
+
+def _normal_rows_from_yaml(path: Path) -> list[dict[str, str]]:
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    rows: list[dict[str, str]] = []
+    for entry in raw.get("entries") or raw.get("benign") or raw.get("normals") or []:
+        if isinstance(entry, dict):
+            text = entry.get("text") or entry.get("prompt") or ""
+        else:
+            text = str(entry)
+        if text:
+            rows.append({"text": text, "traffic_kind": "normal", "category_slug": "benign_adjacent"})
+    return rows
+
+
+def _normal_rows(
+    domain: str = "law",
+    *,
+    normal_txt: Path | None = None,
+    normal_yaml: Path | None = None,
+) -> list[dict[str, str]]:
+    """
+    Normal / FAQ allow suite.
+
+    Defaults: law → benchmark law normal scenarios.
+    Opt-in: --normal-txt / --normal-yaml, or domain holdout benigns for non-law.
+    """
+    if normal_txt is not None and Path(normal_txt).is_file():
+        return _normal_rows_from_txt(Path(normal_txt))
+    if normal_yaml is not None and Path(normal_yaml).is_file():
+        return _normal_rows_from_yaml(Path(normal_yaml))
+
+    if domain == "law":
+        try:
+            from benchmark.law.shared.normal_scenarios import load_normal_scenarios
+
+            return [
+                {"text": s.text, "traffic_kind": "normal", "category_slug": s.category_hint}
+                for s in load_normal_scenarios()
+            ]
+        except Exception:
+            pass
+
+    # Non-law default: benign rows from domain holdout (+ hub FAQ if general)
+    rows = [r for r in _holdout_rows(domain) if r["traffic_kind"] == "benign_adjacent"]
+    for r in rows:
+        r["traffic_kind"] = "normal"
+    if domain == "general":
+        hub_faq = Path("benchmark/hub/benign_faq.txt")
+        if hub_faq.is_file():
+            return _normal_rows_from_txt(hub_faq)
+    return rows
 
 
 def evaluate_classifier(
@@ -66,9 +141,11 @@ def evaluate_classifier(
     *,
     domain: str = "law",
     artifact_dir: Path | None = None,
+    normal_txt: Path | None = None,
+    normal_yaml: Path | None = None,
 ) -> ClassifierEvalResult:
     attacks = [r for r in _holdout_rows(domain) if r["traffic_kind"] == "attack"]
-    normals = _normal_rows()
+    normals = _normal_rows(domain, normal_txt=normal_txt, normal_yaml=normal_yaml)
     blocked = 0
     per_attack: list[dict[str, Any]] = []
     for row in attacks:
@@ -85,12 +162,15 @@ def evaluate_classifier(
         )
     allowed = 0
     non_blocked = 0
+    blocked_normals: list[str] = []
     for row in normals:
         verdict = guard_model.check(row["text"])
         if verdict.decision == "allow":
             allowed += 1
         if verdict.decision != "block":
             non_blocked += 1
+        elif len(blocked_normals) < 20:
+            blocked_normals.append(row["text"][:80])
     fingerprint = None
     if artifact_dir is not None:
         manifest = load_corpus_manifest(artifact_dir)
@@ -108,16 +188,18 @@ def evaluate_classifier(
         normal_non_block_rate=round(non_blocked / len(normals), 4) if normals else 1.0,
         normal_non_blocked=non_blocked,
         corpus_fingerprint=fingerprint,
-        details={"holdout_rows": per_attack},
+        details={"holdout_rows": per_attack, "blocked_normals_sample": blocked_normals},
     )
 
 
 def evaluate_classifier_from_config(
     *,
-    domain: DomainName = "law",
+    domain: str = "law",
     config: GuardModelConfig | None = None,
+    normal_txt: Path | None = None,
+    normal_yaml: Path | None = None,
 ) -> ClassifierEvalResult:
-    triage = load_triage_config(domain=domain)
+    triage = load_triage_config(domain=domain if domain != "general" else "general")
     gm_cfg = config or triage.guard_model
     guard_model = create_guard_model(gm_cfg)
     if guard_model is None or not guard_model.is_ready:
@@ -128,26 +210,45 @@ def evaluate_classifier_from_config(
     from prismguard.models.loader import resolve_artifact_dir
 
     artifact_dir = resolve_artifact_dir(gm_cfg)
-    return evaluate_classifier(guard_model, domain=domain, artifact_dir=artifact_dir)
+    return evaluate_classifier(
+        guard_model,
+        domain=domain,
+        artifact_dir=artifact_dir,
+        normal_txt=normal_txt,
+        normal_yaml=normal_yaml,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="Classifier-only holdout evaluation")
-    parser.add_argument("--domain", default="law", choices=["law", "healthcare", "finance"])
+    parser.add_argument("--domain", default="law", choices=list(DOMAIN_CHOICES))
     parser.add_argument("--artifact-id", default="")
     parser.add_argument("--artifact-path", default="")
+    parser.add_argument(
+        "--normal-txt",
+        default="",
+        help="Opt-in normal/FAQ suite (one prompt per line). Default: domain-specific.",
+    )
+    parser.add_argument("--normal-yaml", default="", help="Opt-in normal suite YAML")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
-    triage = load_triage_config(domain=args.domain)
+    triage = load_triage_config(domain=args.domain if args.domain != "general" else None)
+    if args.domain == "general":
+        triage = load_triage_config(domain="general")
     gm_cfg = triage.guard_model.model_copy()
     if args.artifact_id:
         gm_cfg = gm_cfg.model_copy(update={"artifact_id": args.artifact_id})
     if args.artifact_path:
         gm_cfg = gm_cfg.model_copy(update={"artifact_path": args.artifact_path})
-    result = evaluate_classifier_from_config(domain=args.domain, config=gm_cfg)  # type: ignore[arg-type]
+    result = evaluate_classifier_from_config(
+        domain=args.domain,
+        config=gm_cfg,
+        normal_txt=Path(args.normal_txt) if args.normal_txt else None,
+        normal_yaml=Path(args.normal_yaml) if args.normal_yaml else None,
+    )
     payload = result.to_dict()
     if args.json:
         print(json.dumps(payload, indent=2))

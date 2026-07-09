@@ -15,12 +15,16 @@
 | `create_checker_for_app("web_chat")` | Rules + structural, HashEmbedder, **no ONNX**, fail-open gray |
 | `create_checker_for_app("law_pilot")` | Law domain pack; ONNX only if `PRISMGUARD_USE_ONNX=1` |
 | `create_checker_for_app("sidecar")` | HTTP-oriented; same ONNX opt-in |
-| `PRISMGUARD_USE_ONNX=1` | Explicit opt-in to load `prism-pi-v1` (breaking vs older surprise-ONNX) |
+| `PRISMGUARD_USE_ONNX=1` | **Opt-in** ONNX enforce (default: off). Loads `prism-pi-v1` unless overridden |
+| `PRISMGUARD_ARTIFACT_ID` | **Opt-in** artifact id (default: triage/`prism-pi-v1`). Use `prism-pi-hub-v1` after hub gates |
+| `PRISMGUARD_GUARD_MODEL_PATH` | **Opt-in** absolute artifact dir (overrides id) |
 | `PRISMGUARD_SHADOW_ONNX=1` | Rules enforce; ONNX verdict in `details["shadow_onnx"]` only |
+| `PRISMGUARD_FEEDBACK_PERSIST=1` | **Opt-in** feedback queue for pilot training (default: off) |
 | `PRISMGUARD_OFFLINE=1` | Skip HF / transformer taxonomy; HashEmbedder |
 | `PRISMGUARD_DOMAIN` | Unset / `general` / `core` → **no law overlay**. Set `law` for legal pack. |
 
-**`prism-pi-v1` is law-bench-oriented.** Do not enable ONNX enforce on general product FAQ / hub chat until the hub benign FAQ suite passes (see `tests/test_hub_benign_faq.py` and `benchmark/hub/`).
+**Defaults stay safe:** rules-first, ONNX off, law artifact only if you opt in.  
+**`prism-pi-v1` is law-bench proof.** Hub/FAQ chat needs a hub/customer artifact + green gates before enforce.
 
 ### Core rules vs domain pack vs holdout
 
@@ -95,10 +99,43 @@ See `examples/chorusgraph_hub_guard.py` for a fail-open hub sketch (guard → RA
 
 Future: `GuardBackend` port on `ChorusStack` (ChorusGraph enterprise) — same checker, scheduler-invoked.
 
+## Customer / hub ONNX path (opt-in)
+
+Seed import updates **rules**, not ONNX weights. To turn ONNX on for *your* traffic:
+
+```bash
+# 1) Pilot: rules enforce + optional shadow (defaults)
+export PRISMGUARD_SHADOW_ONNX=1          # opt-in
+export PRISMGUARD_FEEDBACK_PERSIST=1     # opt-in
+
+# 2) After human review of the queue:
+prismguard feedback export -o customer.jsonl
+# optional: --include-calibration-allows
+
+# 3) Plan (no train) — domain pack is opt-in (default: none)
+prismguard-model corpus-plan --profile full --feedback-jsonl customer.jsonl
+
+# 4) Train customer or hub artifact (opt-in --domain-pack)
+prismguard-model train --profile full --feedback-jsonl customer.jsonl \
+  --domain-pack general --holdout-domain general \
+  --normal-txt benchmark/hub/benign_faq.txt \
+  --artifact-id customer-pi-v1 --output-dir ./artifacts/customer-pi-v1
+
+# 5) Gate
+prismguard-model eval --domain general --artifact-path ./artifacts/customer-pi-v1 \
+  --normal-txt benchmark/hub/benign_faq.txt
+
+# 6) Enforce only after gates pass
+export PRISMGUARD_USE_ONNX=1
+export PRISMGUARD_GUARD_MODEL_PATH=./artifacts/customer-pi-v1
+```
+
+Hub maintainer shortcut: `python scripts/train_prism_pi_hub.py` (builds `prism-pi-hub-v1`).
+
 ## Production standards checklist
 
 - [ ] Prefer `create_checker_for_app("web_chat")` for product hubs; use `law_pilot` only for legal pilots
-- [ ] Keep `PRISMGUARD_USE_ONNX` unset until hub FAQ FP gate is green
+- [ ] Keep `PRISMGUARD_USE_ONNX` unset until hub/customer FAQ FP gate is green
 - [ ] Run `python scripts/adversarial_self_check.py` before each release (law bench)
 - [ ] Cite **cold holdout** metrics only externally (not seeded dev set)
 - [ ] Wire **output scan** on every model response

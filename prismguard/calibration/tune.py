@@ -40,13 +40,11 @@ def _holdout_rows(domain: str = "law") -> list[dict[str, str]]:
     return rows
 
 
-def _normal_rows() -> list[dict[str, str]]:
-    from benchmark.law.shared.normal_scenarios import load_normal_scenarios
+def _normal_rows(domain: str = "law") -> list[dict[str, str]]:
+    """Default: law normal scenarios. Non-law uses domain-aware eval normals."""
+    from prismguard.models.eval import _normal_rows as eval_normals
 
-    return [
-        {"text": s.text, "traffic_kind": "normal", "category_slug": s.category_hint}
-        for s in load_normal_scenarios()
-    ]
+    return eval_normals(domain)
 
 
 def _evaluate_config(
@@ -94,7 +92,7 @@ def tune_thresholds(
     storage = create_storage("memory")
     parsed = load_bundled_seed(profile="authored")
     checker = RuntimeChecker.from_storage(storage, parsed, config=base_cfg)
-    rows = _holdout_rows(domain) + _normal_rows()
+    rows = _holdout_rows(domain) + _normal_rows(domain)
 
     best: TuneResult | None = None
     for block_t in block_grid:

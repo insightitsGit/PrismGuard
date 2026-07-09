@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 
 from prismguard.models.constants import DEFAULT_MAX_LENGTH
+from prismguard.models.eval import DOMAIN_CHOICES
+
+_DOMAIN_PACK_CHOICES = ("law", "healthcare", "finance", "general")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -22,7 +25,10 @@ def main(argv: list[str] | None = None) -> int:
     export_cmd.add_argument("--output-dir", default="")
     export_cmd.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
 
-    train_cmd = sub.add_parser("train", help="Fine-tune on seed DB + optional feedback")
+    train_cmd = sub.add_parser(
+        "train",
+        help="Fine-tune on seed DB + optional feedback (domain pack is opt-in)",
+    )
     train_cmd.add_argument("--base-model", default="ProtectAI/deberta-v3-base-prompt-injection")
     train_cmd.add_argument("--artifact-id", default="prism-pi-v1")
     train_cmd.add_argument("--profile", default="full", choices=["authored", "full"])
@@ -38,14 +44,30 @@ def main(argv: list[str] | None = None) -> int:
         "--seed-yaml",
         action="append",
         default=[],
-        help="Extra labeled seed YAML (e.g. law overlay). Repeatable.",
+        help="Extra labeled seed YAML. Repeatable.",
     )
-    train_cmd.add_argument("--law-pack", action="store_true")
+    train_cmd.add_argument(
+        "--law-pack",
+        action="store_true",
+        help="Alias for --domain-pack law (opt-in; default is bundled seed only)",
+    )
+    train_cmd.add_argument(
+        "--domain-pack",
+        default="",
+        choices=["", *_DOMAIN_PACK_CHOICES],
+        help="Opt-in domain overlay + augment (default: none)",
+    )
     train_cmd.add_argument("--oversample-law", action="store_true")
     train_cmd.add_argument("--class-weighted", action="store_true")
     train_cmd.add_argument("--focal-loss", action="store_true")
     train_cmd.add_argument("--holdout-early-stop", action="store_true")
-    train_cmd.add_argument("--holdout-domain", default="law", choices=["law", "healthcare", "finance"])
+    train_cmd.add_argument("--holdout-domain", default="law", choices=list(DOMAIN_CHOICES))
+    train_cmd.add_argument(
+        "--normal-txt",
+        default="",
+        help="Opt-in normal/FAQ allow suite (txt). Default: domain-specific.",
+    )
+    train_cmd.add_argument("--normal-yaml", default="")
     train_cmd.add_argument("--no-calibration", action="store_true")
     train_cmd.add_argument("--output-dir", default="")
 
@@ -56,16 +78,43 @@ def main(argv: list[str] | None = None) -> int:
     stats_cmd.add_argument("--feedback-jsonl", action="append", default=[])
     stats_cmd.add_argument("--seed-yaml", action="append", default=[])
     stats_cmd.add_argument("--law-pack", action="store_true")
+    stats_cmd.add_argument(
+        "--domain-pack",
+        default="",
+        choices=["", *_DOMAIN_PACK_CHOICES],
+        help="Opt-in domain pack (default: none)",
+    )
     stats_cmd.add_argument("--oversample-law", action="store_true")
 
+    plan_cmd = sub.add_parser(
+        "corpus-plan",
+        help="Dry-run training plan (sources, counts, fingerprint) — no train",
+    )
+    plan_cmd.add_argument("--profile", default="full", choices=["authored", "full"])
+    plan_cmd.add_argument("--from-storage", action="store_true")
+    plan_cmd.add_argument("--feedback-jsonl", action="append", default=[])
+    plan_cmd.add_argument("--seed-yaml", action="append", default=[])
+    plan_cmd.add_argument("--law-pack", action="store_true")
+    plan_cmd.add_argument(
+        "--domain-pack",
+        default="",
+        choices=["", *_DOMAIN_PACK_CHOICES],
+        help="Opt-in domain pack (default: none)",
+    )
+    plan_cmd.add_argument("--holdout-domain", default="law", choices=list(DOMAIN_CHOICES))
+    plan_cmd.add_argument("--normal-txt", default="")
+    plan_cmd.add_argument("--normal-yaml", default="")
+
     eval_cmd = sub.add_parser("eval", help="Classifier-only holdout metrics (library KPI)")
-    eval_cmd.add_argument("--domain", default="law", choices=["law", "healthcare", "finance"])
+    eval_cmd.add_argument("--domain", default="law", choices=list(DOMAIN_CHOICES))
     eval_cmd.add_argument("--artifact-id", default="")
     eval_cmd.add_argument("--artifact-path", default="")
+    eval_cmd.add_argument("--normal-txt", default="", help="Opt-in FAQ/normal suite (default: domain)")
+    eval_cmd.add_argument("--normal-yaml", default="")
     eval_cmd.add_argument("--json", action="store_true")
 
     calibrate_cmd = sub.add_parser("calibrate", help="Holdout-safe fusion/threshold tuning")
-    calibrate_cmd.add_argument("--domain", default="law", choices=["law", "healthcare", "finance"])
+    calibrate_cmd.add_argument("--domain", default="law", choices=list(DOMAIN_CHOICES))
     calibrate_cmd.add_argument("--output", type=Path, default=Path("triage.tuned.yaml"))
 
     fit_cal_cmd = sub.add_parser("fit-calibration", help="Fit temperature scaling on existing artifact")
@@ -73,13 +122,17 @@ def main(argv: list[str] | None = None) -> int:
     fit_cal_cmd.add_argument("--artifact-id", default="prism-pi-v1")
     fit_cal_cmd.add_argument("--artifact-path", default="")
     fit_cal_cmd.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
-    fit_cal_cmd.add_argument("--domain", default="law", choices=["law", "healthcare", "finance"])
+    fit_cal_cmd.add_argument("--domain", default="law", choices=list(DOMAIN_CHOICES))
 
     download_cmd = sub.add_parser(
         "download",
         help="Download ONNX model weights (not shipped in PyPI wheel due to size limits)",
     )
-    download_cmd.add_argument("--artifact-id", default="prism-pi-v1")
+    download_cmd.add_argument(
+        "--artifact-id",
+        default="prism-pi-v1",
+        help="Artifact id (default: prism-pi-v1 law proof). Use prism-pi-hub-v1 when published.",
+    )
 
     args = parser.parse_args(argv)
     if args.command == "export":
@@ -130,6 +183,12 @@ def main(argv: list[str] | None = None) -> int:
             train_argv.extend(["--seed-yaml", path])
         if args.law_pack:
             train_argv.append("--law-pack")
+        if args.domain_pack:
+            train_argv.extend(["--domain-pack", args.domain_pack])
+        if args.normal_txt:
+            train_argv.extend(["--normal-txt", args.normal_txt])
+        if args.normal_yaml:
+            train_argv.extend(["--normal-yaml", args.normal_yaml])
         if args.oversample_law:
             train_argv.append("--oversample-law")
         if args.class_weighted:
@@ -145,15 +204,16 @@ def main(argv: list[str] | None = None) -> int:
         return train_main(train_argv)
 
     if args.command == "corpus-stats":
-        from prismguard.models.corpus import default_law_training_paths
+        from prismguard.models.corpus import default_domain_training_paths
         from prismguard.models.train import print_corpus_stats
 
         feedback_paths = [Path(p) for p in args.feedback_jsonl]
         seed_yaml_paths = [Path(p) for p in args.seed_yaml]
-        if args.law_pack:
-            law_seed, law_feedback = default_law_training_paths()
-            seed_yaml_paths.extend(law_seed)
-            feedback_paths.extend(law_feedback)
+        domain_pack = (args.domain_pack or "").strip() or ("law" if args.law_pack else "")
+        if domain_pack:
+            d_seed, d_feedback = default_domain_training_paths(domain_pack)
+            seed_yaml_paths.extend(d_seed)
+            feedback_paths.extend(d_feedback)
         manifest = print_corpus_stats(
             profile=args.profile,
             feedback_paths=feedback_paths,
@@ -164,17 +224,40 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0 if manifest.total_examples > 0 else 1
 
+    if args.command == "corpus-plan":
+        from prismguard.models.corpus import plan_training_corpus
+
+        domain_pack = (args.domain_pack or "").strip() or ("law" if args.law_pack else "") or None
+        plan = plan_training_corpus(
+            profile=args.profile,
+            feedback_paths=[Path(p) for p in args.feedback_jsonl],
+            seed_yaml_paths=[Path(p) for p in args.seed_yaml],
+            domain_pack=domain_pack,
+            from_storage=args.from_storage,
+            holdout_domain=args.holdout_domain,
+            normal_txt=Path(args.normal_txt) if args.normal_txt else None,
+            normal_yaml=Path(args.normal_yaml) if args.normal_yaml else None,
+        )
+        print(json.dumps(plan, indent=2))
+        return 0 if plan["total_examples"] > 0 else 1
+
     if args.command == "eval":
         from prismguard.config.loader import load_triage_config
         from prismguard.models.eval import evaluate_classifier_from_config
 
-        triage = load_triage_config(domain=args.domain)
+        domain_arg = args.domain if args.domain != "general" else "general"
+        triage = load_triage_config(domain=domain_arg if domain_arg != "general" else "general")
         gm_cfg = triage.guard_model.model_copy()
         if args.artifact_id:
             gm_cfg = gm_cfg.model_copy(update={"artifact_id": args.artifact_id})
         if args.artifact_path:
             gm_cfg = gm_cfg.model_copy(update={"artifact_path": args.artifact_path})
-        result = evaluate_classifier_from_config(domain=args.domain, config=gm_cfg)  # type: ignore[arg-type]
+        result = evaluate_classifier_from_config(
+            domain=args.domain,
+            config=gm_cfg,
+            normal_txt=Path(args.normal_txt) if args.normal_txt else None,
+            normal_yaml=Path(args.normal_yaml) if args.normal_yaml else None,
+        )
         if args.json:
             print(json.dumps(result.to_dict(), indent=2))
         else:
