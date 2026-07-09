@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prismguard"
-version = "0.1.1"
-description = "Self-hosted, audit-traceable prompt-injection firewall for LLM applications"
+version = "0.1.2"
+description = "Open-source prompt injection firewall for production LLM applications — explainable, self-hosted, ONNX-powered."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [{ name = "Insight IT Solutions", email = "info@insightits.com" }]
-keywords = ["llm", "security", "prompt-injection", "firewall", "guardrails", "rag"]
+keywords = ["llm", "security", "prompt-injection", "firewall", "guardrails", "jailbreak", "compliance"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -20,11 +20,17 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Security",
 ]
-
 dependencies = [
     "pydantic>=2.5",
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://pypi.org/project/prismguard/"
+Documentation = "https://github.com/insightitsGit/PrismGaurd#readme"
+Repository = "https://github.com/insightitsGit/PrismGaurd"
+Issues = "https://github.com/insightitsGit/PrismGaurd/issues"
+Changelog = "https://pypi.org/project/prismguard/0.1.2/"
 
 [project.optional-dependencies]
 serve = [
@@ -131,7 +137,14 @@ prismguard = [
 ]
 
 [tool.setuptools.exclude-package-data]
-prismguard = ["**/__pycache__/*", "**/*.pyc"]
+prismguard = [
+    "**/__pycache__/*",
+    "**/*.pyc",
+    "models/artifacts/**/model.onnx",
+    "models/artifacts/**/model.int8.onnx",
+    "models/artifacts/prism-pi-v2/**/*",
+    "models/artifacts/prism-pi-v2-hf/**/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

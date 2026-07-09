@@ -1,0 +1,4 @@
+# Authored seed only — fast bootstrap (taxonomy + rules + hand-written examples).
+# Import: prismguard-seed import --bundled
+
+authored/seed.yaml

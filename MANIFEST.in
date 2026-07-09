@@ -1,13 +1,8 @@
 include README.md
 include pyproject.toml
-recursive-include prismguard *.yaml
-recursive-include prismguard *.json
-recursive-include prismguard *.onnx
-recursive-include prismguard *.model
-recursive-include prismguard *.md
-recursive-include prismguard *.txt
-recursive-include prismguard *.csv
-recursive-include prismguard *.parquet
+include LICENSE
+recursive-include docs/assets *.png
+recursive-include docs/assets *.svg
 recursive-exclude * __pycache__
 recursive-exclude * *.py[cod]
 prune benchmark
@@ -18,3 +13,7 @@ prune docs
 prune dist
 prune build
 prune .git
+prune prismguard/models/artifacts/prism-pi-v2
+prune prismguard/models/artifacts/prism-pi-v2-hf
+recursive-exclude prismguard/models/artifacts *model.onnx
+recursive-exclude prismguard/models/artifacts *model.int8.onnx

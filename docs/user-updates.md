@@ -9,7 +9,7 @@ PrismGuard improves through **packaged releases**, not by importing internal eva
 | Python library (`check`, structural rules, HTTP serve) | `pip install -U prismguard` | Upgrade package |
 | Bundled seed corpus | `prismguard init` or `prismguard-seed import --bundled --mode update` | Re-run init/update after upgrade |
 | Domain overlay (law) | Same as seed + `PRISMGUARD_DOMAIN=law` | `prismguard init --domain law` |
-| ONNX classifier (`prism-pi-v1`) | Ships in wheel under `prismguard/models/artifacts/` | Automatic on pip upgrade when we bump model version |
+| ONNX classifier (`prism-pi-v1`) | Metadata in wheel; weights via `prismguard-model download` | Re-run download when model version bumps |
 | Team/Business features | Signed license file | Renew license; set `PRISMGUARD_LICENSE_FILE` |
 
 ## What is **not** shipped into your runtime

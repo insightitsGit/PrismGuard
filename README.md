@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/hero.svg" alt="PrismGuard — prompt injection firewall for production LLM applications" width="100%"/>
+  <img src="https://raw.githubusercontent.com/insightitsGit/PrismGaurd/master/docs/assets/hero.png" alt="PrismGuard — prompt injection firewall for production LLM applications" width="920"/>
 </p>
 
 # PrismGuard
@@ -17,7 +17,7 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 
 ✅ Self-hosted &nbsp;·&nbsp; ✅ Explainable decisions &nbsp;·&nbsp; ✅ ONNX local inference &nbsp;·&nbsp; ✅ Optional LLM Judge &nbsp;·&nbsp; ✅ Built for production
 
-[Quick install](#install) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
+[Quick install](#install) · [PyPI](https://pypi.org/project/prismguard/0.1.2/) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
 
 ### Designed for
 
@@ -63,19 +63,22 @@ We complement the ecosystem — PrismGuard is the **firewall layer** when you ne
 ### Quick install (recommended)
 
 ```bash
-pip install "prismguard[guard-model]"
+pip install "prismguard[guard-model]==0.1.2"
+prismguard-model download   # ~705 MB ONNX — fetched once, cached locally
 prismguard init --domain law
 ```
+
+From [PyPI](https://pypi.org/project/prismguard/0.1.2/) · [release notes](https://pypi.org/project/prismguard/0.1.2/)
 
 You're ready. Run `prismguard check "your prompt here"`.
 
 ### Minimal install
 
 ```bash
-pip install prismguard
+pip install prismguard==0.1.2
 ```
 
-Rules-only path — add `guard-model` when you want the bundled ONNX classifier.
+Rules-only path — add `guard-model` and run `prismguard-model download` for the ONNX classifier.
 
 ---
 
@@ -157,7 +160,7 @@ Details: [`docs/prismguard-design.md`](docs/prismguard-design.md) · [`docs/inte
 
 | Project | Role | Link |
 |---------|------|------|
-| **PrismGuard** | Prompt-injection firewall | [GitHub](https://github.com/insightitsGit/PrismGaurd) |
+| **PrismGuard** | Prompt-injection firewall | [PyPI](https://pypi.org/project/prismguard/) · [GitHub](https://github.com/insightitsGit/PrismGaurd) |
 | **ChorusGraph** | Agent orchestration runtime | [GitHub](https://github.com/insightitsGit/ChorusGraph) |
 | **PrismRAG** | Taxonomy-aware RAG | [GitHub](https://github.com/aminparva84/InsightPrismRAG) |
 | **PrismCortex** | Compliance-grade memory | [GitHub](https://github.com/insightitsGit/PrismCortex) |
