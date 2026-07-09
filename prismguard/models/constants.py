@@ -4,6 +4,7 @@ DEFAULT_MAX_LENGTH = 256
 
 # Categories under-represented in the full seed; oversample during law-focused training.
 THIN_ATTACK_CATEGORIES = (
+    "roleplay_jailbreak",
     "refusal_suppression",
     "data_exfiltration_via_output",
     "system_prompt_exfiltration",

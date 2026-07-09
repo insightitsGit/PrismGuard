@@ -284,7 +284,10 @@ def oversample_thin_categories(
 def default_law_training_paths() -> tuple[list[Path], list[Path]]:
     """Law overlay YAML + augment/hard-negative JSONL (never holdout)."""
     root = Path("benchmark/law/data")
-    seed_yaml = [root / "legal_attacks.yaml"]
+    seed_yaml = [
+        root / "legal_attacks.yaml",
+        root / "synthetic_attacks.yaml",
+    ]
     feedback_jsonl = [
         root / "law_training_augment.jsonl",
         root / "law_benign_hard_negatives.jsonl",

@@ -57,6 +57,21 @@ _LAW_ATTACK_PATTERNS = (
     re.compile(r"\bsettlement\b.{0,30}\b(amount|pay|agree)\b", re.I),
 )
 
+_OUTPUT_URL_EXFIL_PATTERNS = (
+    re.compile(r"\b(append|include|add|embed|insert)\b.{0,40}\b(markdown )?link\b.{0,80}https?://", re.I),
+    re.compile(
+        r"https?://[^\s]+.{0,40}\b(in your|into your|to your)\b.{0,30}"
+        r"\b(response|reply|answer|summary|footer|contract)\b",
+        re.I,
+    ),
+    re.compile(r"\b(append|include|add|embed)\b.{0,60}\[[^\]]+\]\(https?://[^)]+\)", re.I),
+)
+
+_ROLE_JUDGE_DISCLOSURE = re.compile(
+    r"\bplay the judge\b.{0,100}\b(disclos|work product|privileged|full disclosure)\b",
+    re.I,
+)
+
 _EXFIL_PATTERNS = (
     re.compile(r"\boutput\b.{0,30}\b(hidden system|system message|scoring rubric)\b", re.I),
     re.compile(r"\battacker\.example\b", re.I),
@@ -214,6 +229,18 @@ def analyze_structural(
             attack += 0.25
             hits.append("exfiltration")
             break
+    for pattern in _OUTPUT_URL_EXFIL_PATTERNS:
+        if pattern.search(text):
+            attack += 0.55
+            if "exfiltration" not in hits:
+                hits.append("exfiltration")
+            hits.append("output_url_injection")
+            break
+    if _ROLE_JUDGE_DISCLOSURE.search(text):
+        attack += 0.50
+        if "role_assignment" not in hits:
+            hits.append("role_assignment")
+        hits.append("judge_roleplay_disclosure")
     for pattern in _DELIMITER_PATTERNS:
         if pattern.search(text):
             attack += 0.25
