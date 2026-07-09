@@ -5,28 +5,34 @@ from pathlib import Path
 
 import yaml
 
-_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "normal_scenarios_holdout.yaml"
+_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 
 @dataclass(frozen=True)
-class NormalHoldoutScenario:
+class HoldoutScenario:
     scenario_id: str
     text: str
     category_hint: str
     style: str = ""
-    register: str = ""
 
 
-def load_normal_holdout_scenarios() -> list[NormalHoldoutScenario]:
-    with _DATA_PATH.open(encoding="utf-8") as handle:
+def _load_yaml(path: Path) -> list[HoldoutScenario]:
+    with path.open(encoding="utf-8") as handle:
         raw = yaml.safe_load(handle)
     return [
-        NormalHoldoutScenario(
+        HoldoutScenario(
             scenario_id=row["id"],
             text=row["text"],
             category_hint=row.get("category_hint", ""),
             style=row.get("style", ""),
-            register=row.get("register", ""),
         )
         for row in raw.get("scenarios", [])
     ]
+
+
+def load_benign_holdout() -> list[HoldoutScenario]:
+    return _load_yaml(_DATA_DIR / "benign_holdout.yaml")
+
+
+def load_attack_holdout() -> list[HoldoutScenario]:
+    return _load_yaml(_DATA_DIR / "attack_holdout.yaml")

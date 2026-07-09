@@ -14,6 +14,7 @@ from benchmark.law.compare_law import compare_law, write_comparison_report
 from benchmark.law.shared.guards import LLMGuardGate, PrismGuardGate
 from benchmark.law.shared.http_app import create_app
 from benchmark.law.shared.seed_overlap import verify_holdout_overlap
+from benchmark.shared.holdout_quality import verify_law_holdout_phrasing
 
 STACKS = [
     ("CPL", "chorusgraph", PrismGuardGate),
@@ -35,6 +36,17 @@ def run_local(*, output_dir: Path, bundled_limit: int, warmup_requests: int = 0)
         include_holdout_overlay=True,
     )
     overlap = verify_holdout_overlap()
+    phrasing = verify_law_holdout_phrasing()
+    if not all(report.passes for report in phrasing.values()):
+        violations = [
+            f"{name}: {v}"
+            for name, report in phrasing.items()
+            for v in report.violations
+        ]
+        raise ValueError(
+            "Holdout phrasing diversity check failed — add short/long × formal/casual coverage. "
+            + "; ".join(violations)
+        )
 
     for stack_id, framework, guard_cls in STACKS:
         app = create_app(stack_id=stack_id, framework=framework, guard_factory=guard_cls)
@@ -79,6 +91,7 @@ def run_local(*, output_dir: Path, bundled_limit: int, warmup_requests: int = 0)
         "holdout_clean": overlap.holdout_clean,
         "bundled_full_minus_authored_count": overlap.bundled_full_minus_authored_count,
     }
+    report["phrasing_diversity"] = {name: r.as_dict() for name, r in phrasing.items()}
     report["harness"] = {
         "latency_primary_field": "request_latency_ms",
         "latency_guard_field": "guard_latency_ms",

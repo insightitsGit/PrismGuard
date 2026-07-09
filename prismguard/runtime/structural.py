@@ -111,6 +111,11 @@ _BENIGN_PATTERNS = (
     re.compile(r"\blaw school clinic\b", re.I),
     re.compile(r"\bexplain the difference between\b", re.I),
     re.compile(r"\bhow do courts\b", re.I),
+    re.compile(r"\bwhen (may|can) (a|the)\b.{0,100}\?", re.I),
+    re.compile(r"\bwithout breaching\b", re.I),
+    re.compile(r"\bwhat sec rules\b", re.I),
+    re.compile(r"\bpublic company\b.{0,80}\b(disclose|disclosure)\b", re.I),
+    re.compile(r"\bmaterial contracts?\b", re.I),
     re.compile(r"\bwhat does\b.{0,30}\bmean\b", re.I),
     re.compile(r"\boutline\b.{0,40}\b(controls|SOC|workflow)\b", re.I),
 )
@@ -128,7 +133,7 @@ _LEGAL_TOPIC_RE = re.compile(
     r"vesting|unvested|vested|option|stock options?|licensing|negligence|doctrine|"
     r"amortization|refusal|termination|equity|merger|escrow|warranty|representation|"
     r"forum|compliance|fiduciary|severance|covenant|reconciliation|memorandum|"
-    r"deposit|eviction|franchise|royalt|licen[cs]e|at-will|tenancy|damages|"
+    r"deposit|eviction|franchise|royalt|licen[cs]e|licensor|sublicens|most-favored|mfn|at-will|tenancy|damages|"
     r"liquidated|conflict check|forum non conveniens|pci|dss|blue sky|pro rata|"
     r"m&a|nda|msa|default"
     r")\b",

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from benchmark.law.shared.seed_overlap import verify_holdout_overlap
+from benchmark.shared.holdout_quality import verify_law_holdout_phrasing
 
 STACK_FILES = ("cpl", "cgl", "lgl", "lpl")
 UNCONFIGURED_GATES = frozenset(
@@ -315,11 +316,13 @@ def compare_law(results_dir: Path, *, domain: str = "law", skip_overlap_check: b
             "bundled_full_minus_authored_count": overlap_report.bundled_full_minus_authored_count,
         }
     )
+    phrasing_reports = verify_law_holdout_phrasing()
     report: dict[str, Any] = {
         "domain": domain,
         "holdout_source": holdout_source,
         "seeded_source": seeded_source,
         "overlap_check": overlap,
+        "phrasing_diversity": {name: r.as_dict() for name, r in phrasing_reports.items()},
         "stacks": stacks,
         "pairs": [
             {"name": "CPL_vs_CGL", "left": "CPL", "right": "CGL", "isolates": "guardrail@chorusgraph"},

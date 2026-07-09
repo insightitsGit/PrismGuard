@@ -404,6 +404,130 @@ class RuntimeChecker:
         with profiler.section("classifier"):
             return future.result()
 
+    def _classifier_disagrees_with_structural_allow(
+        self,
+        verdict: GuardModelVerdict | None,
+    ) -> bool:
+        if verdict is None:
+            return False
+        if verdict.decision == "uncertain":
+            return True
+        if verdict.decision == "block":
+            return verdict.confidence >= self._config.guard_model.veto_threshold
+        return False
+
+    def _structural_allow_wins_on_disagreement(
+        self,
+        *,
+        normalized: str,
+        structural: object,
+        classifier_verdict: GuardModelVerdict,
+        decision_source: str,
+    ) -> CheckResult:
+        return CheckResult(
+            decision="allow",
+            resolution_gate="structural",
+            matched_category="benign_adjacent",
+            normalized_prompt=normalized,
+            details=self._attach_classifier_details(
+                {
+                    "structural": getattr(structural, "details", {}),
+                    "matched_pattern": getattr(structural, "matched_pattern", None),
+                    "decision_source": decision_source,
+                },
+                classifier_verdict,
+            ),
+        )
+
+    def _invoke_llm_judge(
+        self,
+        *,
+        prompt: str,
+        normalized: str,
+        guard_details: dict,
+        matched_category: str | None,
+        decision_source: str,
+    ) -> CheckResult:
+        if self._llm_judge is None:
+            policy = self._config.gray_zone_policy
+            if policy == "fail_closed":
+                # Structural allow wins over classifier disagreement when Judge is unavailable.
+                decision: Decision = "allow"
+                gate: ResolutionGate = "structural"
+                source = f"{decision_source}→no_judge→structural_wins"
+            else:
+                decision = "allow"
+                gate = "structural"
+                source = f"{decision_source}→no_judge→structural_wins"
+            return CheckResult(
+                decision=decision,
+                resolution_gate=gate,
+                matched_category=matched_category,
+                normalized_prompt=normalized,
+                details={**guard_details, "decision_source": source},
+            )
+
+        profiler = StageProfiler.current()
+        judge_context = {
+            **guard_details,
+            "matched_category": matched_category,
+            "nearest_seed_examples": self._nearest_seed_examples(normalized, matched_category),
+        }
+        if profiler is not None:
+            with profiler.section("judge"):
+                judge = self._llm_judge.judge(prompt, context=judge_context)
+        else:
+            judge = self._llm_judge.judge(prompt, context=judge_context)
+        if judge.details.get("circuit_breaker"):
+            self._judge_circuit_open = True
+        final_decision: Decision = judge.decision
+        result = CheckResult(
+            decision=final_decision,
+            resolution_gate="llm_judge",
+            matched_category=matched_category,
+            normalized_prompt=normalized,
+            details={
+                **guard_details,
+                "llm_judge_confidence": judge.confidence,
+                "llm_judge_latency_ms": judge.latency_ms,
+                "llm_judge_reasoning": judge.reasoning,
+                "decision_source": decision_source,
+            },
+        )
+        self._record_feedback(prompt=prompt, result=result, origin="llm_judge")
+        return result
+
+    def _escalate_structural_classifier_disagreement(
+        self,
+        *,
+        prompt: str,
+        normalized: str,
+        structural: object,
+        classifier_verdict: GuardModelVerdict,
+    ) -> CheckResult:
+        details = self._attach_classifier_details(
+            {
+                "structural": getattr(structural, "details", {}),
+                "matched_pattern": getattr(structural, "matched_pattern", None),
+                "disagreement_escalation": True,
+            },
+            classifier_verdict,
+        )
+        if self._config.gray_zone_policy != "escalate":
+            return self._structural_allow_wins_on_disagreement(
+                normalized=normalized,
+                structural=structural,
+                classifier_verdict=classifier_verdict,
+                decision_source="structural_allow→classifier_disagree→structural_wins",
+            )
+        return self._invoke_llm_judge(
+            prompt=prompt,
+            normalized=normalized,
+            guard_details=details,
+            matched_category="benign_adjacent",
+            decision_source="structural_allow→classifier_disagree→llm_judge",
+        )
+
     def _classifier_first_early_block(
         self,
         verdict: GuardModelVerdict,
@@ -412,6 +536,12 @@ class RuntimeChecker:
         normalized: str = "",
     ) -> CheckResult | None:
         if verdict.decision != "block":
+            return None
+        if (
+            structural is not None
+            and getattr(structural, "decision", None) == "allow"
+            and self._config.guard_model.disagreement_escalation
+        ):
             return None
         threshold = self._config.guard_model.classifier_first_block_threshold
         if verdict.confidence < threshold:
@@ -607,6 +737,12 @@ class RuntimeChecker:
     ) -> tuple[Decision, ResolutionGate, dict]:
         if verdict is None or not self._config.guard_model.veto_enabled:
             return decision, gate, details
+        if (
+            self._config.guard_model.disagreement_escalation
+            and gate == "structural"
+            and decision == "allow"
+        ):
+            return decision, gate, details
         threshold = self._config.guard_model.veto_threshold
         if decision == "allow" and verdict.confidence >= threshold:
             return (
@@ -744,34 +880,13 @@ class RuntimeChecker:
                     )
                     self._record_feedback(prompt=prompt, result=result, origin="guard_model")
                     return result
-            judge_context = {
-                **guard_details,
-                "matched_category": matched_category,
-                "nearest_seed_examples": self._nearest_seed_examples(normalized, matched_category),
-            }
-            if profiler is not None:
-                with profiler.section("judge"):
-                    judge = self._llm_judge.judge(prompt, context=judge_context)
-            else:
-                judge = self._llm_judge.judge(prompt, context=judge_context)
-            if judge.details.get("circuit_breaker"):
-                self._judge_circuit_open = True
-            final_decision: Decision = judge.decision
-            result = CheckResult(
-                decision=final_decision,
-                resolution_gate="llm_judge",
+            return self._invoke_llm_judge(
+                prompt=prompt,
+                normalized=normalized,
+                guard_details=guard_details,
                 matched_category=matched_category,
-                normalized_prompt=normalized,
-                details={
-                    **guard_details,
-                    "llm_judge_confidence": judge.confidence,
-                    "llm_judge_latency_ms": judge.latency_ms,
-                    "llm_judge_reasoning": judge.reasoning,
-                    "decision_source": "fusion_gray→guard_model_uncertain→llm_judge",
-                },
+                decision_source="fusion_gray→guard_model_uncertain→llm_judge",
             )
-            self._record_feedback(prompt=prompt, result=result, origin="llm_judge")
-            return result
 
         if verdict_decision == "block":
             confidence = guard_details.get("guard_model_confidence")
@@ -960,6 +1075,16 @@ class RuntimeChecker:
                     },
                 )
             first_verdict = self._await_classifier_verdict(classifier_future)
+            if (
+                self._config.guard_model.disagreement_escalation
+                and self._classifier_disagrees_with_structural_allow(first_verdict)
+            ):
+                return self._escalate_structural_classifier_disagreement(
+                    prompt=prompt,
+                    normalized=normalized,
+                    structural=structural,
+                    classifier_verdict=first_verdict,  # type: ignore[arg-type]
+                )
             first_block_threshold = self._config.guard_model.classifier_first_block_threshold
             if (
                 first_verdict is None

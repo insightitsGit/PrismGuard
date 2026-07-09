@@ -85,6 +85,8 @@ class GuardModelConfig(BaseModel):
     uncertain_high: float = 0.65
     veto_enabled: bool = True
     veto_threshold: float = 0.65
+    # When structural says allow but classifier disagrees, escalate to Judge instead of veto block.
+    disagreement_escalation: bool = True
     # Classifier-first only short-circuits on very high confidence (not uncertain_high).
     classifier_first_block_threshold: float = 0.85
 

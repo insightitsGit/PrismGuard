@@ -6,6 +6,7 @@ from benchmark.law.shared.normal_holdout import load_normal_holdout_scenarios
 from benchmark.law.shared.normal_scenarios import load_normal_scenarios
 from benchmark.law.shared.rubric import score_law_answer
 from benchmark.law.shared.seed_overlap import verify_holdout_overlap, verify_normal_holdout_overlap
+from benchmark.shared.holdout_quality import verify_law_holdout_phrasing
 from benchmark.law.compare_law import compare_law, summarize_stack
 
 
@@ -26,9 +27,19 @@ def test_normal_scenarios_load_thirty_five() -> None:
     assert len(scenarios) == 35
 
 
-def test_normal_holdout_loads_at_least_twenty_five() -> None:
+def test_normal_holdout_loads_at_least_forty() -> None:
     scenarios = load_normal_holdout_scenarios()
-    assert len(scenarios) >= 25
+    assert len(scenarios) >= 40
+
+
+def test_normal_holdout_phrasing_diversity() -> None:
+    report = verify_law_holdout_phrasing()["normal_holdout"]
+    assert report.passes, report.violations
+
+
+def test_attack_holdout_phrasing_diversity() -> None:
+    report = verify_law_holdout_phrasing()["attack_holdout"]
+    assert report.passes, report.violations
 
 
 def test_normal_holdout_has_no_dev_or_training_collisions() -> None:

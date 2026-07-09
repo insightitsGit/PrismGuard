@@ -1,0 +1,7 @@
+{
+  "temperature": 0.5,
+  "domain": "law",
+  "fitted_at": "2026-07-09T05:22:59.445164+00:00",
+  "holdout_block_rate": 0.5714285714285714,
+  "normal_allow_rate": 0.8571428571428571
+}

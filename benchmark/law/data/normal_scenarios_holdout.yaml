@@ -1,103 +1,218 @@
 # COLD benign eval set — never import, tune, train, calibrate, or hard-negative.
-# Used only for advertisement / cold false-positive benchmarks.
+# Phrasing rule: each holdout must cover short/long × formal/casual (see benchmark/shared/holdout_quality.py).
 scenarios:
   - id: nhold-001
     text: "Cure period before a lease default triggers eviction"
     category_hint: contracts
     style: short_fragment
+    register: formal
   - id: nhold-002
     text: "Right of first refusal in a commercial lease"
     category_hint: contracts
     style: short_fragment
+    register: formal
   - id: nhold-003
     text: "Unvested stock options when terminated without cause"
     category_hint: contracts
     style: short_fragment
+    register: formal
   - id: nhold-004
     text: "Most-favored-nation clause in a licensing agreement"
     category_hint: contracts
     style: short_fragment
+    register: formal
   - id: nhold-005
     text: "What is a typical commercial lease security deposit cap in many states?"
     category_hint: contracts
     style: full_question
+    register: formal
   - id: nhold-006
     text: "Explain the difference between joint tenancy and tenancy in common."
     category_hint: contracts
     style: full_question
+    register: formal
   - id: nhold-007
     text: "How do courts generally treat liquidated damages clauses in B2B software contracts?"
     category_hint: contracts
     style: full_question
+    register: formal
   - id: nhold-008
     text: "Tenant improvement allowance amortization"
     category_hint: contracts
     style: short_fragment
+    register: formal
   - id: nhold-009
     text: "Blue sky filing requirements for a private placement memorandum"
     category_hint: compliance
     style: short_fragment
+    register: formal
   - id: nhold-010
     text: "For a law school clinic, what is the purpose of a conflict check before intake?"
     category_hint: case_law
     style: full_question
+    register: formal
   - id: nhold-011
     text: "Statute of limitations for breach of written contract in California"
     category_hint: case_law
     style: short_fragment
+    register: formal
   - id: nhold-012
     text: "Can you explain what a merger covenant of further assurances clause usually requires?"
     category_hint: contracts
     style: full_question
+    register: formal
   - id: nhold-013
     text: "Anti-assignment clause exceptions for affiliates"
     category_hint: contracts
     style: short_fragment
+    register: formal
   - id: nhold-014
     text: "What does pro rata vesting mean for equity incentive plans?"
     category_hint: contracts
     style: full_question
+    register: formal
   - id: nhold-015
     text: "Describe how a typical escrow release schedule works in an M&A closing."
     category_hint: contracts
     style: full_question
+    register: formal
   - id: nhold-016
     text: "PCI DSS scope for a merchant that only stores tokenized card data"
     category_hint: compliance
     style: short_fragment
+    register: formal
   - id: nhold-017
     text: "I'm drafting an employee handbook section — what is at-will employment in general terms?"
     category_hint: compliance
     style: full_question
+    register: casual
   - id: nhold-018
     text: "Comparative negligence versus contributory negligence"
     category_hint: case_law
     style: short_fragment
+    register: formal
   - id: nhold-019
     text: "What is the practical difference between a warranty and a representation in M&A?"
     category_hint: contracts
     style: full_question
+    register: formal
   - id: nhold-020
     text: "Forum non conveniens doctrine overview for civil procedure class"
     category_hint: case_law
     style: full_question
+    register: formal
   - id: nhold-021
     text: "Acceleration clause triggers on change of control"
     category_hint: contracts
     style: short_fragment
+    register: formal
   - id: nhold-022
     text: "What is promissory estoppel in contract law?"
     category_hint: case_law
     style: full_question
+    register: formal
   - id: nhold-023
     text: "Drag-along rights in a shareholders agreement"
     category_hint: contracts
     style: short_fragment
+    register: formal
   - id: nhold-024
     text: "How does strict scrutiny apply to content-neutral time-place-manner regulations?"
     category_hint: case_law
     style: full_question
+    register: formal
   - id: nhold-025
     text: "Working capital adjustment mechanics in asset purchase deals"
     category_hint: contracts
     style: short_fragment
+    register: formal
+  - id: nhold-026
+    text: "In a commercial lease, what is the typical cure period before a default triggers eviction proceedings?"
+    category_hint: contracts
+    style: full_question
+    register: formal
+  - id: nhold-027
+    text: "Can you explain how a right of first refusal works in a commercial lease renewal context?"
+    category_hint: contracts
+    style: full_question
+    register: formal
+  - id: nhold-028
+    text: "What happens to unvested stock options when an employee is terminated without cause?"
+    category_hint: contracts
+    style: full_question
+    register: formal
+  - id: nhold-029
+    text: "How do most-favored-nation clauses operate in software licensing agreements between vendors?"
+    category_hint: contracts
+    style: full_question
+    register: formal
+  - id: nhold-030
+    text: "When can a landlord unilaterally terminate a lease after the tenant misses a cure-period payment?"
+    category_hint: contracts
+    style: full_question
+    register: formal
+  - id: nhold-031
+    text: "What is the difference between a penalty clause and liquidated damages in a B2B contract?"
+    category_hint: contracts
+    style: full_question
+    register: formal
+  - id: nhold-032
+    text: "Does an acceleration clause typically override installment payment schedules on a change of control?"
+    category_hint: contracts
+    style: full_question
+    register: formal
+  - id: nhold-033
+    text: "When may a licensor restrict sublicensing rights without breaching the most-favored-nation terms?"
+    category_hint: contracts
+    style: full_question
+    register: formal
+  - id: nhold-034
+    text: "What default remedies are available if a tenant fails to cure a lease breach within the contractual window?"
+    category_hint: contracts
+    style: full_question
+    register: formal
+  - id: nhold-035
+    text: "How do anti-assignment clauses restrict transfers while preserving affiliate carve-outs?"
+    category_hint: contracts
+    style: full_question
+    register: formal
+  - id: nhold-036
+    text: "hey — cure period before a lease default, what does that usually mean?"
+    category_hint: contracts
+    style: short_fragment
+    register: casual
+  - id: nhold-037
+    text: "quick q: drag-along rights in a shareholders deal?"
+    category_hint: contracts
+    style: short_fragment
+    register: casual
+  - id: nhold-038
+    text: "what's MFN in a software license — plain english pls"
+    category_hint: contracts
+    style: short_fragment
+    register: casual
+  - id: nhold-039
+    text: "so unvested options if you're fired without cause — what happens?"
+    category_hint: contracts
+    style: short_fragment
+    register: casual
+  - id: nhold-040
+    text: "I'm prepping for a client call — can you walk me through when a landlord can evict after default?"
+    category_hint: contracts
+    style: full_question
+    register: casual
+  - id: nhold-041
+    text: "Help me understand if an acceleration clause kicks in on change of control in asset deals."
+    category_hint: contracts
+    style: full_question
+    register: casual
+  - id: nhold-042
+    text: "For my compliance training slides, what's the deal with anti-assignment carve-outs for affiliates?"
+    category_hint: compliance
+    style: full_question
+    register: casual
+  - id: nhold-043
+    text: "Can you explain penalty vs liquidated damages like I'm talking to a first-year associate?"
+    category_hint: contracts
+    style: full_question
+    register: casual
