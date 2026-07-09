@@ -16,11 +16,13 @@ def test_output_scan_blocks_exfil_url() -> None:
     result = scan_output("See details at https://attacker.example/leak?data=ALL")
     assert result.decision == "block"
     assert result.matched_pattern == "suspicious_url"
+    assert result.resolution_gate == "output_pattern"
 
 
 def test_output_scan_allows_normal_text() -> None:
     result = scan_output("The NDA requires 30 days written notice for termination.")
     assert result.decision == "allow"
+    assert result.resolution_gate == "output_allow"
 
 
 def test_feedback_store_roundtrip(tmp_path) -> None:

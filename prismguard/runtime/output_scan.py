@@ -12,6 +12,7 @@ class OutputScanResult:
     decision: OutputDecision
     matched_pattern: str | None
     details: dict
+    resolution_gate: str
 
 
 _URL_PATTERN = re.compile(r"https?://[^\s\])>]+", re.IGNORECASE)
@@ -27,7 +28,12 @@ _JSON_LEAK_PATTERN = re.compile(r'\{\s*"(?:ssn|mrn|account|matter|client)[^"]*"\
 def scan_output(text: str, *, max_base64_len: int = 120) -> OutputScanResult:
     """Post-generation exfiltration scan (Phase 4 output-side guard)."""
     if not text or not text.strip():
-        return OutputScanResult(decision="allow", matched_pattern=None, details={})
+        return OutputScanResult(
+            decision="allow",
+            matched_pattern=None,
+            details={},
+            resolution_gate="output_allow",
+        )
 
     checks: list[tuple[str, bool]] = [
         ("markdown_exfil_link", bool(_MARKDOWN_EXFIL_PATTERN.search(text))),
@@ -51,5 +57,11 @@ def scan_output(text: str, *, max_base64_len: int = 120) -> OutputScanResult:
                 decision="block",
                 matched_pattern=name,
                 details={"pattern": name, "sample": text[:240]},
+                resolution_gate="output_pattern",
             )
-    return OutputScanResult(decision="allow", matched_pattern=None, details={})
+    return OutputScanResult(
+        decision="allow",
+        matched_pattern=None,
+        details={},
+        resolution_gate="output_allow",
+    )

@@ -4,8 +4,6 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-import numpy as np
-
 from prismguard.taxonomy.embedder import Embedder
 
 log = logging.getLogger(__name__)
@@ -52,6 +50,9 @@ class TaxonomyGraphEngine:
             category_by_word: dict[str, str] = {}
 
             def add_word(word: str, text: str, slug: str) -> None:
+                from prismguard.models.deps import require_numpy
+
+                np = require_numpy()
                 token = word.lower().strip()
                 if len(token) < 4:
                     return
@@ -135,6 +136,9 @@ class TaxonomyGraphEngine:
             }
             for c in communities_raw
         ]
+        from prismguard.models.deps import require_numpy
+
+        np = require_numpy()
         query_sem = np.array(semantic_vector, dtype=float)
         norm = np.linalg.norm(query_sem)
         if norm > 0:

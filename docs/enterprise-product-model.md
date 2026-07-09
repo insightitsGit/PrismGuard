@@ -38,6 +38,20 @@ License env: `PRISMGUARD_LICENSE_FILE` (signed Ed25519 JSON — same issuer patt
 
 Dev override: `PRISMGUARD_DEV_UNRESTRICTED=1` (local only — never in production docs).
 
+### Production license key gate (Business / Enterprise)
+
+**Do not issue real customer licenses against the current embedded key.**  
+`prismguard/licensing/keys.py` ships a **development / CI** Ed25519 public key shared with ChorusGraph (`_LICENSE_PUBLIC_KEY_B64`). That key is intentionally public (verification only); it is **not** a production issuer.
+
+Before any paid Team / Business / Pilot license is sold or signed:
+
+1. Director (or designated security owner) generates a **new** Ed25519 keypair used only for PrismGuard customer licenses.
+2. The **private** half is held in a secure issuer store (not in git, not shared with the ChorusGraph dev/CI key).
+3. `_LICENSE_PUBLIC_KEY_B64` in `keys.py` is updated to the **production public** key and released in a versioned package.
+4. Customer license files are signed with that production private key only.
+
+Until those steps are done, signed licenses are for **dev/CI/demo** only. Code already supports the swap via `license_public_key_bytes()` — this is a business-process gate, not a missing feature.
+
 Customer updates (pip / seed / model — **not** holdout import): see [`user-updates.md`](user-updates.md). Post-install verify: `prismguard eval self-check`.
 
 ## Honest positioning (all channels)

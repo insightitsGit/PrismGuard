@@ -12,7 +12,7 @@ from typing import Any
 from prismguard.licensing.errors import LicenseError, LicenseExpiredError
 from prismguard.licensing.keys import license_public_key_bytes
 
-_ENTERPRISE_CONTACT = "https://github.com/insightitsGit/PrismGaurd/blob/master/docs/enterprise-product-model.md"
+_ENTERPRISE_CONTACT = "https://github.com/insightitsGit/PrismGuard/blob/master/docs/enterprise-product-model.md"
 _CACHED: dict[str, Any] | None = None
 _CACHED_PATH: str | None = None
 

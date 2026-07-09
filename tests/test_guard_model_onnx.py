@@ -165,7 +165,7 @@ def test_live_prism_onnx_artifact_if_present() -> None:
     assert attack.model_id == "prism-pi-v1"
 
 
-@patch("prismguard.runtime.guard_model.load_onnx_classifier")
+@patch("prismguard.models.loader.load_onnx_classifier")
 def test_create_guard_model_wraps_ready_classifier(mock_load) -> None:
     mock_classifier = MagicMock()
     mock_classifier.model_id = "prism-pi-v1"

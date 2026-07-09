@@ -9,7 +9,7 @@ ENTERPRISE_PERSISTENCE = "enterprise_persistence"  # pgvector, feedback sink
 ENTERPRISE_HTTP = "enterprise_http"  # prismguard serve
 ENTERPRISE_TENANT = "enterprise_tenant"  # tenant lexicon in production
 
-_ENTERPRISE_CONTACT = "https://github.com/insightitsGit/PrismGaurd/blob/master/docs/enterprise-product-model.md"
+_ENTERPRISE_CONTACT = "https://github.com/insightitsGit/PrismGuard/blob/master/docs/enterprise-product-model.md"
 _DEV_FEATURES = frozenset({ENTERPRISE_PERSISTENCE, ENTERPRISE_HTTP, ENTERPRISE_TENANT})
 
 

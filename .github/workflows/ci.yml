@@ -23,3 +23,51 @@ jobs:
           pip install -e ".[guard-model,serve,enterprise,dev]"
       - name: Run tests
         run: python -m pytest tests/ -q --tb=short
+      - name: Verify wheel build (no ONNX in package)
+        run: |
+          pip install build
+          python -m build
+          python -c "
+          import glob, zipfile
+          w = glob.glob('dist/*.whl')[0]
+          z = zipfile.ZipFile(w)
+          onnx = [n for n in z.namelist() if n.endswith('model.onnx')]
+          assert not onnx, f'model.onnx must not ship in wheel: {onnx}'
+          import pathlib
+          assert pathlib.Path(w).stat().st_size < 100 * 1024 * 1024
+          print('wheel OK:', w)
+          "
+
+  # Regression gate for Buglib1: base wheel with zero extras must not crash on entry points.
+  base-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+      - name: Install wheel with zero extras in clean venv
+        run: |
+          python -m venv .venv-base
+          .venv-base/bin/pip install --upgrade pip
+          .venv-base/bin/pip install dist/prismguard-*.whl
+      - name: Base entry points must not crash
+        run: |
+          set -e
+          .venv-base/bin/prismguard --help
+          .venv-base/bin/prismguard doctor
+          .venv-base/bin/prismguard-seed --help
+          .venv-base/bin/prismguard-model --help
+          .venv-base/bin/prismguard-profile --help
+          # serve hard-requires [serve]; must fail with a clear message, not ModuleNotFoundError: numpy
+          set +e
+          out=$(.venv-base/bin/prismguard-serve 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          test "$code" -ne 0
+          echo "$out" | grep -qi "prismguard\[serve\]"

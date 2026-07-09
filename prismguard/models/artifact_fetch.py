@@ -31,7 +31,7 @@ ARTIFACT_DOWNLOADS: dict[str, dict[str, dict[str, str | int]]] = {
         "model.onnx": {
             "url": os.environ.get(
                 "PRISMGUARD_MODEL_DOWNLOAD_URL",
-                "https://github.com/insightitsGit/PrismGaurd/releases/download/v0.1.2/prism-pi-v1-model.onnx",
+                "https://github.com/insightitsGit/PrismGuard/releases/download/v0.1.2/prism-pi-v1-model.onnx",
             ),
             "sha256": "02e1531e3399c28daffa1a3e67da1b6b6dbd25f3628df16c9b2ab1345d4dd73d",
             "size_bytes": 738_656_170,

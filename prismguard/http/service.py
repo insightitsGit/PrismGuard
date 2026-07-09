@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 
 from prismguard.licensing.features import ENTERPRISE_HTTP, require_feature
 from prismguard.observability.metrics import get_metrics
-from prismguard.runtime.check import RuntimeChecker
 from prismguard.runtime.output_scan import scan_output
 from prismguard.seed import import_bundled_seed, load_bundled_seed
 from prismguard.storage import create_storage_from_env
@@ -49,13 +48,15 @@ class HealthResponse(BaseModel):
     classifier_ready: bool
 
 
-_checker: RuntimeChecker | None = None
+_checker = None
 
 
-def _get_checker() -> RuntimeChecker:
+def _get_checker():
     global _checker
     if _checker is not None:
         return _checker
+    from prismguard.runtime.check import RuntimeChecker
+
     domain = os.environ.get("PRISMGUARD_DOMAIN", "law")
     storage = create_storage_from_env()
     parsed = load_bundled_seed(profile=os.environ.get("PRISMGUARD_SEED_PROFILE", "authored"))
@@ -90,12 +91,17 @@ def _get_checker() -> RuntimeChecker:
 def create_app():
     """FastAPI app factory — lazy-imports fastapi so OSS installs stay light."""
     require_feature(ENTERPRISE_HTTP)
-    from fastapi import FastAPI
-    from starlette.concurrency import run_in_threadpool
+    try:
+        from fastapi import FastAPI
+        from starlette.concurrency import run_in_threadpool
+    except ImportError as exc:
+        raise ImportError(
+            "HTTP service requires the serve extra: pip install prismguard[serve]"
+        ) from exc
 
     app = FastAPI(
         title="PrismGuard API",
-        version="0.1.2",
+        version="0.1.4",
         description="Audited prompt-injection guard service (Business tier).",
     )
 
@@ -171,7 +177,12 @@ def create_app():
 
 
 def main() -> None:
-    import uvicorn
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise SystemExit(
+            "prismguard-serve requires the serve extra: pip install prismguard[serve]"
+        ) from exc
 
     host = os.environ.get("PRISMGUARD_HOST", "0.0.0.0")
     port = int(os.environ.get("PRISMGUARD_PORT", "8090"))

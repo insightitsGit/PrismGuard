@@ -19,7 +19,6 @@ from prismguard.context.matcher import (
 from prismguard.context.models import TenantLexicon
 from prismguard.context.loader import load_lexicon_file, load_tenant_lexicon
 from prismguard.runtime.fusion import fuse_signals
-from prismguard.runtime.guard_model import GuardModel, GuardModelVerdict
 from prismguard.runtime.llm_judge import LLMJudge
 from prismguard.runtime.normalize import normalize_prompt
 from prismguard.runtime.session import SessionStore, create_session_store
@@ -32,7 +31,8 @@ from prismguard.taxonomy.embedder import Embedder, HashEmbedder, create_embedder
 
 if TYPE_CHECKING:
     from prismguard.feedback.review import FeedbackReviewService
-from prismguard.taxonomy.graph import TaxonomyGraphEngine
+    from prismguard.runtime.guard_model import GuardModel, GuardModelVerdict
+    from prismguard.taxonomy.graph import TaxonomyGraphEngine
 from prismguard.taxonomy.ingest import ingest_seed_vectors, iter_all_seed_entries
 from prismguard.taxonomy.mapping import TaxonomyEngine, build_mapping_from_parsed_seed
 
@@ -164,6 +164,8 @@ class RuntimeChecker:
             raise ValueError(
                 "gray_zone_policy='escalate' requires a configured GuardModel at RuntimeChecker init"
             )
+        from prismguard.taxonomy.graph import TaxonomyGraphEngine
+
         if self._config.embedding.corpus_path_enabled:
             seed_texts: list[tuple[str, str]] = []
             for category in storage.relational.list_categories():

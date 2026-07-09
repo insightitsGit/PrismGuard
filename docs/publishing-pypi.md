@@ -13,21 +13,23 @@ prismguard check "Summarize indemnity caps in a vendor MSA."
 
 All must pass before upload.
 
-## Publish ONNX model asset (required before PyPI)
+## Publish ONNX model asset (required once; reuse across patch releases)
 
-The ONNX file (~705 MB) **cannot** ship in the PyPI wheel (100 MB limit). Upload it as a GitHub Release asset first:
+The ONNX file (~705 MB) **cannot** ship in the PyPI wheel (100 MB limit). It is hosted as a GitHub Release asset. Current download URL (used by `artifact_fetch.py`):
 
-```powershell
-# From repo root — asset name must match artifact_fetch.py URL
-Copy-Item prismguard/models/artifacts/prism-pi-v1/model.onnx dist/prism-pi-v1-model.onnx
-gh release create v0.1.2 dist/prism-pi-v1-model.onnx --title "v0.1.2" --notes "ONNX model for prism-pi-v1"
+```text
+https://github.com/insightitsGit/PrismGuard/releases/download/v0.1.2/prism-pi-v1-model.onnx
 ```
+
+Patch releases (e.g. `0.1.4`) that do not change model weights **reuse** that asset — no new ONNX upload required.
+
+If you ever ship new weights, create a new GitHub release asset and update the default URL in `prismguard/models/artifact_fetch.py`.
 
 Verify download URL works:
 
 ```powershell
 Invoke-WebRequest -Method Head `
-  "https://github.com/insightitsGit/PrismGaurd/releases/download/v0.1.2/prism-pi-v1-model.onnx"
+  "https://github.com/insightitsGit/PrismGuard/releases/download/v0.1.2/prism-pi-v1-model.onnx"
 ```
 
 ## Build
@@ -66,33 +68,33 @@ Expected: wheel **under 100 MB**, `model.onnx in wheel 0`, `cli_check True`, `be
 ```powershell
 $env:TWINE_USERNAME = "__token__"
 $env:TWINE_PASSWORD = "pypi-YOUR_TOKEN_HERE"
-twine upload dist/prismguard-0.1.2-py3-none-any.whl
-twine upload dist/prismguard-0.1.2.tar.gz
+twine upload dist/prismguard-0.1.4-py3-none-any.whl
+twine upload dist/prismguard-0.1.4.tar.gz
 ```
 
 Upload the **wheel first**; it is smaller and validates packaging.
 
-## What ships in 0.1.2
+## What ships in 0.1.4
 
 | Item | Included |
 |------|----------|
 | `prismguard check` CLI | yes |
 | `prismguard eval self-check` | yes |
+| Base install (zero extras) CLI entry points | yes — Buglib1 fix |
+| `POST /v1/scan-output` `resolution_gate` | yes — QA-001 fix |
 | Signed license validator (`enterprise` extra) | yes |
 | HTTP serve + `/metrics` (`serve` extra) | yes |
 | ONNX metadata (tokenizer, model card, calibration) | yes (in wheel) |
 | ONNX `model.onnx` weights | **no** — `prismguard-model download` or auto-fetch on first use |
 | `prism-pi-v2` artifacts | **no** (repo dev only) |
 | `benchmark/` harness | **no** |
-| README hero image | GitHub only until raw URL added post-push |
 
-## Post-publish (second commit)
+## Post-publish
 
-1. Confirm package live: `pip install "prismguard[guard-model]" && prismguard-model download`
-2. Update README hero `img src` to raw GitHub URL:
-   `https://raw.githubusercontent.com/insightitsGit/PrismGaurd/master/docs/assets/hero.png`
-3. Update PyPI badge / InsightitsAIAgent catalog with PyPI URL
-4. Tag: `git tag v0.1.2 && git push origin v0.1.2`
+1. Confirm package live: `pip install "prismguard==0.1.4"` then `prismguard --help` and `prismguard doctor` (no numpy crash).
+2. Confirm with extras: `pip install "prismguard[guard-model]==0.1.4" && prismguard-model download`
+3. Yank broken `0.1.3` on PyPI (Director go-ahead): reason e.g. `Base install crashes without numpy; use 0.1.4`
+4. Tag: `git tag v0.1.4 && git push origin v0.1.4`
 
 ## Customer install
 

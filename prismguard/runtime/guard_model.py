@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from prismguard.config.loader import GuardModelConfig, load_triage_config
-from prismguard.models.loader import load_corpus_manifest, load_onnx_classifier, resolve_artifact_dir
 from prismguard.models.verdict import GuardModelDecision
 
 
@@ -67,6 +66,8 @@ class PrismONNXGuardModel:
     """PrismGuard-owned ONNX classifier for the Guard Model tier."""
 
     def __init__(self, config: GuardModelConfig) -> None:
+        from prismguard.models.loader import load_corpus_manifest, load_onnx_classifier, resolve_artifact_dir
+
         self._config = config
         self._classifier = None
         self._init_error = ""
@@ -75,7 +76,7 @@ class PrismONNXGuardModel:
             artifact_dir = resolve_artifact_dir(config)
             self._corpus_manifest = load_corpus_manifest(artifact_dir)
             self._classifier = load_onnx_classifier(config)
-        except Exception as exc:  # pragma: no cover - missing artifact in dev
+        except Exception as exc:  # pragma: no cover - missing artifact / optional deps
             self._init_error = str(exc)
 
     @property

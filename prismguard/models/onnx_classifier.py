@@ -7,14 +7,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from prismguard.models.calibration import apply_temperature, load_calibration
+from prismguard.models.deps import require_numpy, require_onnxruntime, require_tokenizers_tokenizer
 from prismguard.models.model_card import ModelCard
 from prismguard.models.verdict import injection_probability_to_decision
 
 
-def _softmax(logits: np.ndarray) -> np.ndarray:
+def _softmax(logits: Any) -> Any:
+    np = require_numpy()
     shifted = logits - np.max(logits, axis=-1, keepdims=True)
     exp = np.exp(shifted)
     return exp / np.sum(exp, axis=-1, keepdims=True)
@@ -107,8 +107,8 @@ class ONNXPromptInjectionClassifier:
                 "Run: python -m prismguard.models.export --artifact-id prism-pi-v1"
             )
 
-        import onnxruntime as ort
-        from tokenizers import Tokenizer
+        ort = require_onnxruntime()
+        Tokenizer = require_tokenizers_tokenizer()
 
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -140,7 +140,8 @@ class ONNXPromptInjectionClassifier:
         self.predict("warmup")
         self._warmed_up = True
 
-    def _encode(self, text: str) -> tuple[np.ndarray, np.ndarray]:
+    def _encode(self, text: str) -> tuple[Any, Any]:
+        np = require_numpy()
         encoding = self._tokenizer.encode(text)
         token_ids = encoding.ids[: self._card.max_length]
         pad_len = _dynamic_pad_length(len(token_ids), max_length=self._card.max_length)
@@ -154,6 +155,7 @@ class ONNXPromptInjectionClassifier:
         return ids, mask
 
     def predict(self, text: str) -> ClassifierPrediction:
+        np = require_numpy()
         start = time.perf_counter()
         input_ids, attention_mask = self._encode(text)
         outputs = self._session.run(

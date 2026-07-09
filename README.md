@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/insightitsGit/PrismGaurd/master/docs/assets/hero.png" alt="PrismGuard — prompt injection firewall for production LLM applications" width="920"/>
+  <img src="https://raw.githubusercontent.com/insightitsGit/PrismGuard/master/docs/assets/hero.png" alt="PrismGuard — prompt injection firewall for production LLM applications" width="920"/>
 </p>
 
 # PrismGuard
@@ -12,12 +12,12 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 [![Python](https://img.shields.io/pypi/pyversions/prismguard.svg)](https://pypi.org/project/prismguard/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Downloads](https://static.pepy.tech/badge/prismguard)](https://pepy.tech/project/prismguard)
-[![CI](https://github.com/insightitsGit/PrismGaurd/actions/workflows/ci.yml/badge.svg)](https://github.com/insightitsGit/PrismGaurd/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-172%20passed-brightgreen)](tests/)
+[![CI](https://github.com/insightitsGit/PrismGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/insightitsGit/PrismGuard/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-178%20passed-brightgreen)](tests/)
 
 ✅ Self-hosted &nbsp;·&nbsp; ✅ Explainable decisions &nbsp;·&nbsp; ✅ ONNX local inference &nbsp;·&nbsp; ✅ Optional LLM Judge &nbsp;·&nbsp; ✅ Built for production
 
-[Quick install](#install) · [PyPI](https://pypi.org/project/prismguard/0.1.2/) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
+[Quick install](#install) · [PyPI](https://pypi.org/project/prismguard/0.1.4/) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
 
 ### Designed for
 
@@ -34,7 +34,7 @@ PrismGuard sits **in front of your LLM** and classifies each user prompt before 
 | Prompt injection detection | Blocks jailbreaks before inference |
 | Explainable decisions | Every decision is auditable (`resolution_gate`) |
 | Self-hosted deployment | Data stays on your infrastructure |
-| ONNX local model (`prism-pi-v1`) | No external API required for classification |
+| ONNX local model (`prism-pi-v1`) | No external API required; weights via `prismguard-model download` |
 | LLM Judge | Escalates only uncertain cases (~7% on law bench) |
 | Legal domain pack | Tuned and verified for legal workflows |
 | HTTP API (`prismguard serve`) | Production sidecar (Business tier) |
@@ -63,22 +63,48 @@ We complement the ecosystem — PrismGuard is the **firewall layer** when you ne
 ### Quick install (recommended)
 
 ```bash
-pip install "prismguard[guard-model]==0.1.2"
+pip install "prismguard[prism,guard-model]==0.1.4"
 prismguard-model download   # ~705 MB ONNX — fetched once, cached locally
 prismguard init --domain law
 ```
 
-From [PyPI](https://pypi.org/project/prismguard/0.1.2/) · [release notes](https://pypi.org/project/prismguard/0.1.2/)
+From [PyPI](https://pypi.org/project/prismguard/0.1.4/) · [release notes](https://pypi.org/project/prismguard/0.1.4/)
 
 You're ready. Run `prismguard check "your prompt here"`.
 
 ### Minimal install
 
 ```bash
-pip install prismguard==0.1.2
+pip install prismguard==0.1.4
 ```
 
-Rules-only path — add `guard-model` and run `prismguard-model download` for the ONNX classifier.
+Rules-only path — add `[prism,guard-model]` and run `prismguard-model download` for the full ONNX classifier.
+
+### ONNX model (one-time download)
+
+The PyPI wheel ships code and tokenizer metadata (~4 MB). The ONNX weights (~705 MB) download separately on first use:
+
+```bash
+prismguard-model download
+```
+
+Cached at `~/.cache/prismguard/artifacts/prism-pi-v1/` (Windows: `%USERPROFILE%\.cache\prismguard\...`).  
+Model asset: [GitHub Release v0.1.2](https://github.com/insightitsGit/PrismGuard/releases/tag/v0.1.2)
+
+Air-gapped or mirror:
+
+```bash
+export PRISMGUARD_MODEL_DOWNLOAD_URL="https://your-mirror/prism-pi-v1-model.onnx"
+prismguard-model download
+```
+
+### Verify install
+
+```bash
+prismguard doctor
+prismguard eval self-check
+prismguard check "Summarize indemnity caps in a vendor MSA."
+```
 
 ---
 
@@ -160,7 +186,7 @@ Details: [`docs/prismguard-design.md`](docs/prismguard-design.md) · [`docs/inte
 
 | Project | Role | Link |
 |---------|------|------|
-| **PrismGuard** | Prompt-injection firewall | [PyPI](https://pypi.org/project/prismguard/) · [GitHub](https://github.com/insightitsGit/PrismGaurd) |
+| **PrismGuard** | Prompt-injection firewall | [PyPI](https://pypi.org/project/prismguard/) · [GitHub](https://github.com/insightitsGit/PrismGuard) |
 | **ChorusGraph** | Agent orchestration runtime | [GitHub](https://github.com/insightitsGit/ChorusGraph) |
 | **PrismRAG** | Taxonomy-aware RAG | [GitHub](https://github.com/aminparva84/InsightPrismRAG) |
 | **PrismCortex** | Compliance-grade memory | [GitHub](https://github.com/insightitsGit/PrismCortex) |
@@ -169,6 +195,9 @@ Details: [`docs/prismguard-design.md`](docs/prismguard-design.md) · [`docs/inte
 ---
 
 ## FAQ
+
+**Where is the ONNX model?**  
+Not in the PyPI wheel (size limits). Run `prismguard-model download` once after install, or set `PRISMGUARD_MODEL_DOWNLOAD_URL` for a private mirror.
 
 **Does this call OpenAI?**  
 No — by default. The ONNX classifier and rules run locally. An optional LLM Judge can call OpenAI if you configure it; most traffic never escalates.
@@ -188,6 +217,7 @@ Yes. Tier-1 rules, seed corpus imports, domain overlays, and tenant lexicons ext
 
 - [x] Law domain pack (verified)
 - [x] ONNX classifier (`prism-pi-v1`)
+- [x] PyPI release ([0.1.4](https://pypi.org/project/prismguard/0.1.4/))
 - [x] HTTP API (`prismguard serve`)
 - [x] ChorusGraph integration
 - [ ] Healthcare validation
@@ -200,11 +230,11 @@ Yes. Tier-1 rules, seed corpus imports, domain overlays, and tenant lexicons ext
 ## Repository structure
 
 ```
-PrismGaurd/
-├── prismguard/          # Library, CLI, ONNX artifacts, domain packs
+PrismGuard/
+├── prismguard/          # Library, CLI, ONNX metadata, domain packs
 ├── docs/                # Architecture, integration, enterprise model
 ├── benchmark/           # Law 4-stack harness (dev checkout only)
-├── tests/               # 172+ pytest cases
+├── tests/               # 178+ pytest cases
 ├── scripts/             # Adversarial self-check, diagnostics
 └── handoffs/            # Marketing & launch assets
 ```
@@ -240,8 +270,9 @@ Full report: [`benchmark/law/results/current/COMPARISON_REPORT.md`](benchmark/la
 | Need | Command / doc |
 |------|----------------|
 | Verify install | `prismguard doctor` · `prismguard eval self-check` |
-| HTTP sidecar | `pip install "prismguard[serve,enterprise,guard-model]"` |
-| Reproduce benchmarks | `pip install -e ".[benchmark-law,guard-model,llm-guard]"` |
+| HTTP sidecar | `pip install "prismguard[serve,enterprise,prism,guard-model]"` |
+| Download ONNX weights | `prismguard-model download` |
+| Reproduce benchmarks | `pip install -e ".[benchmark-law,guard-model,llm-guard]"` (dev checkout) |
 | Enterprise tiers | [`docs/enterprise-product-model.md`](docs/enterprise-product-model.md) |
 
 ---
@@ -253,7 +284,8 @@ Full report: [`benchmark/law/results/current/COMPARISON_REPORT.md`](benchmark/la
 | [`docs/prismguard-design.md`](docs/prismguard-design.md) | Full architecture |
 | [`docs/integration-guide.md`](docs/integration-guide.md) | Library, HTTP, ChorusGraph |
 | [`docs/law-pilot-readiness.md`](docs/law-pilot-readiness.md) | Ship gates |
-| [`docs/user-updates.md`](docs/user-updates.md) | How upgrades reach your install |
+| [`docs/user-updates.md`](docs/user-updates.md) | How upgrades and model artifacts reach your install |
+| [`docs/publishing-pypi.md`](docs/publishing-pypi.md) | Maintainer publish checklist |
 
 ---
 

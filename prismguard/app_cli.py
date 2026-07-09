@@ -14,7 +14,6 @@ from prismguard.context.loader import (
 )
 from prismguard.context.templates import lexicon_to_parsed_seed
 from prismguard.domains.registry import get_domain_pack, list_domains
-from prismguard.runtime.guard_model import create_guard_model
 from prismguard.seed import import_bundled_seed, import_seeds
 from prismguard.storage import create_storage, create_storage_from_env
 
@@ -192,11 +191,22 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     coherence_ok = True
     if cfg.gray_zone_policy == "escalate" and cfg.guard_model.enabled:
+        from prismguard.runtime.guard_model import create_guard_model
+
         model = create_guard_model(cfg.guard_model)
         ready = model is not None and model.is_ready
-        report["checks"].append({"name": "guard_model", "ok": ready, "artifact_id": cfg.guard_model.artifact_id})
+        check: dict = {
+            "name": "guard_model",
+            "ok": ready,
+            "artifact_id": cfg.guard_model.artifact_id,
+        }
         if not ready:
             coherence_ok = False
+            check["detail"] = (
+                "guard model not ready — install extras and download artifacts: "
+                "pip install prismguard[guard-model] && prismguard-model download"
+            )
+        report["checks"].append(check)
     else:
         report["checks"].append({"name": "guard_model", "ok": True, "detail": "not required for current policy"})
 

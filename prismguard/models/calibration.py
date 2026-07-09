@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import numpy as np
+from prismguard.models.deps import require_numpy
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class CalibrationArtifact:
         )
 
 
-def apply_temperature(logits: np.ndarray, temperature: float) -> np.ndarray:
+def apply_temperature(logits: Any, temperature: float) -> Any:
     if temperature <= 0:
         raise ValueError("temperature must be positive")
     if abs(temperature - 1.0) < 1e-6:
@@ -42,12 +42,13 @@ def apply_temperature(logits: np.ndarray, temperature: float) -> np.ndarray:
 
 
 def fit_temperature(
-    logits: np.ndarray,
-    labels: np.ndarray,
+    logits: Any,
+    labels: Any,
     *,
     temperature_grid: list[float] | None = None,
 ) -> float:
     """Grid-search temperature minimizing binary cross-entropy on labeled rows."""
+    np = require_numpy()
     if logits.ndim != 2 or logits.shape[1] != 2:
         raise ValueError("logits must be (n, 2)")
     labels = labels.astype(int)

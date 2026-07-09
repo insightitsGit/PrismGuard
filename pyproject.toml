@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prismguard"
-version = "0.1.2"
+version = "0.1.4"
 description = "Open-source prompt injection firewall for production LLM applications — explainable, self-hosted, ONNX-powered."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,10 +27,10 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://pypi.org/project/prismguard/"
-Documentation = "https://github.com/insightitsGit/PrismGaurd#readme"
-Repository = "https://github.com/insightitsGit/PrismGaurd"
-Issues = "https://github.com/insightitsGit/PrismGaurd/issues"
-Changelog = "https://pypi.org/project/prismguard/0.1.2/"
+Documentation = "https://github.com/insightitsGit/PrismGuard#readme"
+Repository = "https://github.com/insightitsGit/PrismGuard"
+Issues = "https://github.com/insightitsGit/PrismGuard/issues"
+Changelog = "https://pypi.org/project/prismguard/0.1.4/"
 
 [project.optional-dependencies]
 serve = [
@@ -87,6 +87,7 @@ dev = [
     "pytest-cov>=5.0.0",
     "mypy>=1.10.0",
     "ruff>=0.4.0",
+    "scikit-learn>=1.4.0",
     "prismguard[seed,prism]",
 ]
 seed = [

@@ -58,10 +58,15 @@ def test_download_artifact_writes_model(tmp_path: Path, monkeypatch: pytest.Monk
 
 
 def test_ensure_artifact_without_download_raises(tmp_path: Path) -> None:
-    packaged = tmp_path / "prism-pi-v1"
-    packaged.mkdir()
+    packaged = tmp_path / "packaged" / "prism-pi-v1"
+    packaged.mkdir(parents=True)
     (packaged / "model_card.yaml").write_text("model_id: prism-pi-v1\n", encoding="utf-8")
+    cache = tmp_path / "cache" / "prism-pi-v1"
+    cache.mkdir(parents=True)
 
-    with patch.object(artifact_fetch, "packaged_artifact_dir", return_value=packaged):
+    with (
+        patch.object(artifact_fetch, "packaged_artifact_dir", return_value=packaged),
+        patch.object(artifact_fetch, "cache_artifact_dir", return_value=cache),
+    ):
         with pytest.raises(FileNotFoundError, match="prismguard-model download"):
             artifact_fetch.ensure_artifact_ready("prism-pi-v1", auto_download=False)
