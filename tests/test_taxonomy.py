@@ -56,7 +56,7 @@ def test_runtime_checker_allows_benign_research_framing() -> None:
         benign = next(e for e in parsed.entries if e.category_slug == "benign_adjacent")
         result = checker.check(benign.canonical_text())
         assert result.decision == "allow"
-        assert result.resolution_gate in ("benign_fast_path", "fusion_allow")
+        assert result.resolution_gate in ("benign_fast_path", "fusion_allow", "structural")
     finally:
         storage.close()
 

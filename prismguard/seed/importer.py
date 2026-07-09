@@ -148,6 +148,8 @@ class SeedImporter:
                 severity=entry.severity,
                 source=entry.source,
                 reviewed_by=existing.reviewed_by if existing else None,
+                content_hash=content_hash,
+                raw_text_sha256=existing.raw_text_sha256 if existing else "",
                 created_at=existing.created_at if existing else datetime.now(UTC),
                 updated_at=datetime.now(UTC),
             )

@@ -16,6 +16,8 @@ class SeedEntryRecord:
     severity: str
     source: str
     reviewed_by: str | None = None
+    content_hash: str = ""
+    raw_text_sha256: str = ""
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

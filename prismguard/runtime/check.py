@@ -25,6 +25,7 @@ from prismguard.runtime.normalize import normalize_prompt
 from prismguard.runtime.session import SessionStore, create_session_store
 from prismguard.runtime.stage_profiler import StageProfiler
 from prismguard.runtime.structural import analyze_structural
+from prismguard.runtime.verdict_cache import content_address, get_verdict_cache, rule_version_snapshot
 from prismguard.runtime.thresholds import resolve_thresholds
 from prismguard.storage.protocols import StorageBackend
 from prismguard.taxonomy.embedder import Embedder, HashEmbedder, create_embedder_from_config
@@ -764,6 +765,27 @@ class RuntimeChecker:
     def check(self, prompt: str, *, session_id: str | None = None) -> CheckResult:
         profiler = StageProfiler.begin()
         wall_start = time.perf_counter()
+        cache = get_verdict_cache()
+        cache_key: str | None = None
+        normalized_for_cache = normalize_prompt(
+            prompt,
+            max_obfuscation_depth=self._config.normalization.max_obfuscation_depth,
+        )
+        if cache is not None and self._guard_model is not None:
+            cache_key = content_address(
+                normalized_prompt=normalized_for_cache,
+                artifact_id=self._guard_model.model_id,
+                classifier_mode=self._config.guard_model.classifier_mode,
+                rule_version=rule_version_snapshot(
+                    tier1_rules=self._storage.relational.list_rules(),
+                ),
+                structural_threshold=self._config.structural.structural_block_threshold,
+                veto_threshold=self._config.guard_model.veto_threshold,
+            )
+            cached = cache.get(cache_key)
+            if cached is not None:
+                cached.normalized_prompt = normalized_for_cache
+                return cached
         try:
             result = self._check_body(prompt, session_id=session_id)
             if profiler is not None:
@@ -783,6 +805,8 @@ class RuntimeChecker:
                     attack_sim=result.attack_sim,
                     decision=result.decision,
                 )
+            if cache is not None and cache_key is not None:
+                cache.put(cache_key, result)
             return result
         finally:
             StageProfiler.end()
