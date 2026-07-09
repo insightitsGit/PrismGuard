@@ -85,6 +85,10 @@ def _import_tenant_context(
 
 
 def cmd_init(args: argparse.Namespace) -> int:
+    if args.context_file or args.context_table:
+        from prismguard.licensing.features import ENTERPRISE_TENANT, require_feature
+
+        require_feature(ENTERPRISE_TENANT)
     storage = _storage_for_cli(args.backend)
     output: dict = {"steps": []}
     try:
@@ -211,6 +215,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             "name": "classifier_mode",
             "ok": True,
             "mode": cfg.guard_model.classifier_mode,
+            "disagreement_escalation": cfg.guard_model.disagreement_escalation,
             "veto_enabled": cfg.guard_model.veto_enabled,
         }
     )
@@ -236,6 +241,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def cmd_context_import(args: argparse.Namespace) -> int:
+    if args.apply:
+        from prismguard.licensing.features import ENTERPRISE_TENANT, require_feature
+
+        require_feature(ENTERPRISE_TENANT)
     path = Path(args.source)
     lexicon = load_lexicon_file(path)
     print(
@@ -308,6 +317,18 @@ def _build_parser() -> argparse.ArgumentParser:
     domains_cmd = sub.add_parser("domains", help="List available domain packs")
     domains_cmd.add_argument("--json", action="store_true")
 
+    eval_cmd = sub.add_parser("eval", help="Install verification (not internal holdout benchmark)")
+    eval_sub = eval_cmd.add_subparsers(dest="eval_command", required=True)
+    self_check_cmd = eval_sub.add_parser(
+        "self-check",
+        help="Verify classifier + fresh probes after pip install (holdout is eval-only, never imported)",
+    )
+    self_check_cmd.add_argument(
+        "--skip-runtime",
+        action="store_true",
+        help="Config checks only (no ONNX runtime probes)",
+    )
+
     return parser
 
 
@@ -331,6 +352,14 @@ def main(argv: list[str] | None = None) -> None:
             for pack in packs:
                 print(f"{pack.name}\t{pack.label}\t{pack.overlay_path}")
         return
+    if args.command == "eval":
+        if args.eval_command == "self-check":
+            from prismguard.eval.self_check import format_report, run_user_verify
+
+            report = run_user_verify(skip_runtime=args.skip_runtime)
+            print(format_report(report))
+            raise SystemExit(0 if report.ok else 1)
+        parser.error(f"Unknown eval command {args.eval_command!r}")
     parser.error(f"Unknown command {args.command!r}")
 
 

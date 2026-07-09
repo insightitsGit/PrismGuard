@@ -103,7 +103,7 @@ def run_local(*, output_dir: Path, bundled_limit: int, warmup_requests: int = 0)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run in-process law benchmark")
-    parser.add_argument("--output-dir", type=Path, default=Path("benchmark/law/results/latest"))
+    parser.add_argument("--output-dir", type=Path, default=Path("benchmark/law/results/current"))
     parser.add_argument("--bundled-limit", type=int, default=100)
     parser.add_argument(
         "--warmup-requests",

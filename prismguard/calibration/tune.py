@@ -11,7 +11,6 @@ from prismguard.config.loader import TriageConfig, load_triage_config
 from prismguard.runtime.check import RuntimeChecker
 from prismguard.seed import load_bundled_seed
 from prismguard.storage import create_storage
-from prismguard.taxonomy.mapping import build_mapping_from_parsed_seed
 
 
 @dataclass(frozen=True)
@@ -88,11 +87,12 @@ def tune_thresholds(
     base_cfg = load_triage_config(config_path, domain=domain)
     base_cfg = base_cfg.model_copy(deep=True)
     base_cfg.embedding.prefer_transformer = False
+    base_cfg.embedding.corpus_path_enabled = True  # fusion tuning requires ANN path (HashEmbedder when prefer_transformer=False)
     base_cfg.guard_model.enabled = False
     base_cfg.gray_zone_policy = "fail_closed"
+    base_cfg.guard_model = base_cfg.guard_model.model_copy(update={"classifier_mode": "gray_only"})
     storage = create_storage("memory")
     parsed = load_bundled_seed(profile="authored")
-    engine = build_mapping_from_parsed_seed(parsed)
     checker = RuntimeChecker.from_storage(storage, parsed, config=base_cfg)
     rows = _holdout_rows(domain) + _normal_rows()
 
@@ -100,12 +100,10 @@ def tune_thresholds(
     for block_t in block_grid:
         for allow_t in allow_grid:
             for w_clf in w_clf_grid:
-                trial_cfg = base_cfg.model_copy(deep=True)
-                trial_cfg.triage.block_threshold = block_t
-                trial_cfg.triage.allow_threshold = allow_t
-                trial_cfg.fusion.w_clf = w_clf
-                checker._config = trial_cfg  # noqa: SLF001
-                attack_rate, normal_rate = _evaluate_config(checker, trial_cfg, rows)
+                checker._config.triage.block_threshold = block_t  # noqa: SLF001
+                checker._config.triage.allow_threshold = allow_t  # noqa: SLF001
+                checker._config.fusion.w_clf = w_clf  # noqa: SLF001
+                attack_rate, normal_rate = _evaluate_config(checker, checker._config, rows)
                 if normal_rate < 1.0:
                     continue
                 score = attack_rate

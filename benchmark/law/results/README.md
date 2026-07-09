@@ -1,38 +1,55 @@
-# Law benchmark results layout
+# Law benchmark results
 
-## Authoritative (use these)
+## Authoritative run (cite for README / landing / sales)
 
 | Path | Description |
 |------|-------------|
-| **`verified/`** | First run with fixed client latency instrumentation (`request_latency_ms`). **Cite this for product decisions.** |
-| `repro-comparison.json` | Back-to-back repro: run-a vs run-b decision stability |
-| `verified-vs-repro-b.json` | Verified vs repro-run-b (same harness) |
+| **`current/`** | Latest verified 4-stack law benchmark after holdout-FP fixes and `disagreement_escalation`. **Only directory to cite externally.** |
 
-## Reproducibility check (2026-07-08)
+Artifacts: `comparison.json`, `COMPARISON_REPORT.md`, `{cpl,cgl,lgl,lpl}.jsonl`.
 
-Two back-to-back law runs (`repro-run-a`, `repro-run-b`), same code path, bundled-limit 100:
+Re-run:
 
-- **Decisions: 100% stable** — 0 decision mismatches, 0 gate mismatches across all 4 stacks (189 requests each).
-- **Latency: run-to-run variance is high** (CPL mean abs delta ~461–679 ms between runs) due to cold model load, CPU contention, and fresh gate init per stack — **not** decision flapping.
+```powershell
+python -m benchmark.law.run_local_benchmark --output-dir benchmark/law/results/current
+python scripts/adversarial_self_check.py   # required before claiming a win
+```
 
-Conclusion: **Non-determinism is in timing, not in block/allow outcomes.** Earlier Docker vs local disagreements were environment/config mismatch, not random decisions.
+## Stacks (same traffic, different guard + framework)
 
-## Deprecated / do not cite
+| ID | Framework | Guard | Compares |
+|----|-----------|-------|----------|
+| **CPL** | ChorusGraph (in-process) | **PrismGuard** | vs CGL |
+| **CGL** | ChorusGraph | **LLM Guard** | baseline |
+| **LPL** | LangGraph (in-process) | **PrismGuard** | vs LGL |
+| **LGL** | LangGraph | **LLM Guard** | baseline |
 
-| Path | Why |
-|------|-----|
-| `latest/` (pre-2026-07-08) | Used pipeline-internal `latency_ms` as headline; mixed with Docker `atk_combined.jsonl` |
-| `repro-run-a/` | Pre-harness-fix latency fields (decisions still valid) |
+## Eval sets in `current/` run
 
-## Harness latency fields (post-fix)
+| Set | Rows | Use |
+|-----|------|-----|
+| `legal_overlay_holdout` | 14 attacks | Cold attack block rate (external claims) |
+| `normal_scenario_holdout` | 25 normals | Cold FP eval in this HTTP benchmark |
+| `normal_scenario_seeded` | 35 normals | Dev/tuning only — do not cite as cold eval |
+| `legal_overlay_seeded` / `bundled_full` | attacks | Dev stress — not cold eval |
+
+**Expanded normal holdout (43 prompts)** is validated separately by `scripts/adversarial_self_check.py` (in-process, not the HTTP 4-stack harness). As of 2026-07-09: **43/43 allow**.
+
+## Deprecated (removed)
+
+Older directories (`verified/`, `latest/`, `post-optimization/`, `docker-verified/`, `repro-run-*`, `post-holdout-fix/`) were superseded by `current/` and deleted to avoid citing stale numbers.
+
+## Harness fields
 
 | Field | Meaning |
 |-------|---------|
-| `request_latency_ms` | **Primary** — HTTP client wall clock (TestClient or atk runner) |
-| `guard_latency_ms` | Guard-only (`guard.check()`) |
-| `pipeline_latency_ms` | In-process runner (guard + retrieval) |
-| `latency_ms` | Alias for `request_latency_ms` in jsonl output |
+| `request_latency_ms` | **Primary** — HTTP client wall clock |
+| `guard_latency_ms` | Guard-only (`check()`) |
+| `pipeline_latency_ms` | In-process runner (guard + retrieval stub) |
 
-Run: `python -m benchmark.law.run_local_benchmark --output-dir benchmark/law/results/verified`
+## Other folders (not product claims)
 
-Compare runs: `python scripts/compare_repro_runs.py run-a run-b`
+| Path | Purpose |
+|------|---------|
+| `corpus_scale/` | Corpus ablation experiments |
+| `repro-comparison.json` | Historical repro notes |

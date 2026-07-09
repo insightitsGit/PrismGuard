@@ -1,5 +1,6 @@
 from prismguard.storage.factory import (
     DEFAULT_BACKEND,
+    OSS_DEFAULT_BACKEND,
     SUPPORTED_BACKENDS,
     create_storage,
     create_storage_from_env,
@@ -10,6 +11,7 @@ from prismguard.storage.protocols import RelationalStore, StorageBackend, Vector
 
 __all__ = [
     "DEFAULT_BACKEND",
+    "OSS_DEFAULT_BACKEND",
     "SUPPORTED_BACKENDS",
     "InMemoryStorageBackend",
     "RelationalStore",

@@ -65,7 +65,8 @@ def test_tune_thresholds_law() -> None:
 def test_domain_triage_merge() -> None:
     cfg = load_triage_config(domain="law")
     assert cfg.triage.block_threshold == 0.74
-    assert cfg.fusion.w_clf == 0.32
+    assert cfg.fusion.w_clf == 0.35
+    assert cfg.guard_model.disagreement_escalation is True
 
 
 def test_domain_holdout_packs_exist() -> None:

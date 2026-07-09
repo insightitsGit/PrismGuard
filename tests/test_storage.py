@@ -42,15 +42,17 @@ def test_create_memory_backend_round_trip() -> None:
     assert results[0].score == pytest.approx(1.0)
 
 
-def test_pgvector_backend_requires_dsn() -> None:
+def test_pgvector_backend_requires_dsn(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PRISMGUARD_DEV_UNRESTRICTED", "1")
     with pytest.raises(ValueError, match="dsn"):
         create_storage("pgvector")
 
 
 @pytest.mark.integration
-def test_pgvector_round_trip() -> None:
+def test_pgvector_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
     import os
 
+    monkeypatch.setenv("PRISMGUARD_DEV_UNRESTRICTED", "1")
     dsn = os.environ.get("TEST_PGVECTOR_DSN") or os.environ.get("PRISMGUARD_STORAGE_DSN")
     if not dsn:
         pytest.skip("Set TEST_PGVECTOR_DSN for pgvector integration test")

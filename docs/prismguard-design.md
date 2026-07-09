@@ -497,35 +497,28 @@ Factorial design isolates **agent framework** vs **input guardrail**:
 
 **Runners:** `benchmark/law/run_local_benchmark.py` (TestClient, authoritative for detection), `benchmark/law/docker-compose.yml` + `atk/attack_runner.py` (HTTP — **must rebuild images before citing**), `compare_law.py` → `COMPARISON_REPORT.md`. Repro check: `scripts/compare_repro_runs.py`.
 
-**Results layout:** see `benchmark/law/results/README.md`. **Authoritative law numbers:** `benchmark/law/results/verified/` only.
+**Results layout:** see `benchmark/law/results/README.md`. **Authoritative law numbers:** `benchmark/law/results/current/` only.
 
 **Overlap integrity:** `benchmark/law/shared/seed_overlap.py` verifies holdout prompts do not collide with seeded overlay or bundled corpus.
 
-**Docker:** `benchmark/law/docker-compose.yml` bakes ONNX artifact for CPL/LPL via `prismguard-model train` (`MAX_TRAIN_EXAMPLES` configurable). Set `PRISMGUARD_DOMAIN=law` for domain triage overrides. **Stale Docker images produced misleading latency and detection (classifier not on 100% of requests); rebuild before any Docker benchmark.**
+**Docker:** `benchmark/law/docker-compose.yml` bakes ONNX artifact for CPL/LPL via `prismguard-model train` (`MAX_TRAIN_EXAMPLES` configurable). Set `PRISMGUARD_DOMAIN=law` for domain triage overrides. **Rebuild images before citing Docker numbers.**
 
-### Reproducibility (2026-07-08)
+### Current law benchmark (2026-07-09 — cite this)
 
-Two back-to-back local law runs (`repro-run-a`, `repro-run-b`), same code, bundled-limit 100:
+Source: `benchmark/law/results/current/COMPARISON_REPORT.md`. Gate: `scripts/adversarial_self_check.py` SHIP_READY.
 
-- **Decisions: 100% stable** — 0 decision mismatches, 0 resolution-gate mismatches across all 4 stacks (189 requests each).
-- **Latency: run-to-run variance is high** (timing noise from cold ONNX/embed load, fresh gate init per stack) — **not** decision flapping.
+| Stack | Holdout attack block | Normal holdout pass | Request latency (mean) | Judge rate |
+|-------|----------------------|---------------------|------------------------|------------|
+| **CPL** (PrismGuard) | **100%** (14/14) | **100%** (25/25) | **211 ms** | 7.0% |
+| **CGL** (LLM Guard) | 64.3% (9/14) | 100% | 353 ms | 0% |
+| **LPL** (PrismGuard) | **100%** | **100%** | **254 ms** | 7.0% |
+| **LGL** (LLM Guard) | 64.3% | 100% | 375 ms | 0% |
 
-Earlier Docker vs local disagreements were **environment/config mismatch**, not non-deterministic runtime logic.
+PrismGuard leads on cold holdout attack block (+35.7 pp vs LLM Guard on same framework) with tied normal holdout pass. In this run PrismGuard is also **lower latency** than LLM Guard on both pairings.
 
-### Verified law benchmark (2026-07-08 — first numbers worth citing)
+Expanded **43-prompt** normal holdout: **43/43 allow** via `adversarial_self_check.py` (in-process; not the HTTP 4-stack harness).
 
-Source: `benchmark/law/results/verified/COMPARISON_REPORT.md` (client `request_latency_ms`, harness fix applied).
-
-| Stack | Holdout block | Normal pass | Request latency (mean) | Guard latency (mean) | Judge rate |
-|-------|---------------|-------------|------------------------|----------------------|------------|
-| **CPL** (PrismGuard) | **85.7%** (12/14) | **100%** (35/35) | **1,694 ms** | 1,613 ms | ~6.9% |
-| **CGL** (LLM Guard) | 64.3% (9/14) | 100% | 455 ms | 443 ms | 0% |
-| **LPL** (PrismGuard) | **85.7%** | **100%** | **965 ms** | 920 ms | ~6.9% |
-| **LGL** (LLM Guard) | 64.3% | 100% | 260 ms | 230 ms | 0% |
-
-PrismGuard leads on law holdout detection (+21.4 pp) with tied normal pass. LLM Guard is ~3.7× faster on **client-measured** request latency (CPL vs CGL).
-
-**Do not cite:** `benchmark/law/results/latest/` (pre-fix pipeline latency), Docker `atk_combined.jsonl` without image rebuild, or quarantined healthcare results (see below).
+**Do not cite:** removed stale dirs (`verified/`, `latest/`, …), quarantined healthcare results, or Docker atk without image rebuild.
 
 ### Cost / latency reporting
 
@@ -556,7 +549,7 @@ PrismGuard leads on law holdout detection (+21.4 pp) with tied normal pass. LLM 
 
 Quarantined invalid healthcare run: `benchmark/healthcare/results/quarantine-2026-07-08-mislabeled/` — used law traffic + domain flag only; do not cite.
 
-See `benchmark/law/results/verified/COMPARISON_REPORT.md` for full paired deltas.
+See `benchmark/law/results/current/COMPARISON_REPORT.md` for full paired deltas.
 
 ---
 
@@ -605,12 +598,13 @@ Ongoing: Docker image rebuild + parity re-run; ONNX latency optimization; full 2
 
 | Gap | Impact | Notes |
 |-----|--------|-------|
-| **pgvector / Chroma / Pinecone / Weaviate backends** | Cannot deploy persistent corpus today | `storage/backends/*` raise `NotImplementedError`; all benchmarks use `memory` |
-| **No HTTP classification service** | Integrators embed `RuntimeChecker` directly (by design for v1) | Benchmark FastAPI stacks are eval-only, not a product API |
 | **Session / multi-turn fusion** | `session_id` logged; escalation score in fusion but no Redis wiring | `session-redis` extra exists but unwired |
-| **Output scan not in `check()`** | Agent integrators must wire post-generation hook | By design for now |
+| **Output scan not in `check()`** | Agent integrators must wire post-generation hook | Use `scan_output()` or `POST /v1/scan-output` on Business serve |
 | **Runtime decision cache** | Every request full pipeline | `cache` config only used for LLM Judge semantic cache |
 | **prismLib warm-load at startup** | Design describes server warm-load | Implementation uses `RuntimeChecker.from_storage()` per process |
+| **Production license signing key** | Dev issuer key in repo | Replace before first paid customer |
+
+**Shipped (2026-07-09):** pgvector/Chroma/Pinecone/Weaviate backends (Team license gate), `prismguard serve` HTTP API (Business), signed offline licenses, `/metrics`, ChorusGraph guard node.
 
 ### Gaps — evaluation & quality
 
@@ -634,7 +628,7 @@ Ongoing: Docker image rebuild + parity re-run; ONNX latency optimization; full 2
 
 ### Recommended next work (priority order)
 
-1. **Docker parity re-run** — rebuild CPL/LPL/CGL/LGL images from current commit; run atk; confirm decisions match `verified/` and `request_latency_ms` is recorded
+1. **Docker parity re-run** — rebuild CPL/LPL/CGL/LGL images from current commit; run atk; confirm decisions match `current/` and `request_latency_ms` is recorded
 2. **Product decision** — legal/compliance wedge (holdout + audit trail) vs pause; do not expand domains until law Docker parity is green
 3. **Latency (law only, measured)** — expand fast-allow/structural share on normal traffic; target client p50 on allows without hurting verified holdout
 4. **Close 2/14 law holdout misses** — `roleplay_jailbreak`, `data_exfiltration_via_output` (no judge dependency — judge added 0 holdout blocks)

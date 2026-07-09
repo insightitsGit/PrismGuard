@@ -50,7 +50,7 @@ def smoke_legitimate(targets: dict[str, str], output_dir: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run law benchmark scenarios")
     parser.add_argument("--smoke", action="store_true", help="Benign query smoke test only")
-    parser.add_argument("--output-dir", type=Path, default=Path("benchmark/law/results/latest"))
+    parser.add_argument("--output-dir", type=Path, default=Path("benchmark/law/results/current"))
     parser.add_argument("--wait-seconds", type=int, default=0)
     parser.add_argument("--bundled-limit", type=int, default=200)
     args = parser.parse_args()

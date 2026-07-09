@@ -1,5 +1,7 @@
 # Law pilot readiness — priorities before any new domain or feature work
 
+**Business model:** [enterprise-product-model.md](enterprise-product-model.md) · **Integrate:** [integration-guide.md](integration-guide.md)
+
 **Gate:** Do not call law "solid" or ship externally until `scripts/adversarial_self_check.py` exits 0.
 
 ## Operating principles (non-negotiable)
@@ -78,6 +80,6 @@ After blockers 1–3 are green, talk to **one real prospective customer** (compl
 ```powershell
 python scripts/adversarial_self_check.py
 python scripts/diagnose_fp_path.py
-python -m benchmark.law.run_local_benchmark --output-dir benchmark/law/results/latest --bundled-limit 50 --warmup-requests 3
+python -m benchmark.law.run_local_benchmark --output-dir benchmark/law/results/current --bundled-limit 50 --warmup-requests 3
 python -m pytest tests/test_law_benchmark.py tests/test_disagreement_escalation.py -q
 ```

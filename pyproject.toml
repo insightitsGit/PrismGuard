@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prismguard"
-version = "0.1.0"
+version = "0.1.1"
 description = "Self-hosted, audit-traceable prompt-injection firewall for LLM applications"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 authors = [{ name = "Insight IT Solutions", email = "info@insightits.com" }]
 keywords = ["llm", "security", "prompt-injection", "firewall", "guardrails", "rag"]
 classifiers = [
@@ -27,6 +27,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+serve = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+]
+enterprise = [
+    "cryptography>=42.0",
+]
 prism = [
     "prismlib>=0.4.0",
     "prismrag-patch>=0.2.1,<1.0.0",
@@ -100,21 +107,31 @@ calibration = [
     "prismguard[seed,prism]",
 ]
 all = [
-    "prismguard[pgvector,chroma,pinecone,weaviate,guard-model,seed,dev]",
+    "prismguard[pgvector,chroma,pinecone,weaviate,guard-model,seed,dev,serve,enterprise]",
 ]
 
 [project.scripts]
 prismguard = "prismguard.app_cli:main"
 prismguard-seed = "prismguard.cli:main"
 prismguard-model = "prismguard.models.cli:main"
+prismguard-serve = "prismguard.http.service:main"
 prismguard-profile = "prismguard.tools.profile_pipeline:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["prismguard*", "benchmark*"]
+include = ["prismguard*"]
 
 [tool.setuptools.package-data]
-prismguard = ["config/triage.yaml", "config/storage.yaml", "seed/corpus/**/*", "models/artifacts/**/*", "domains/**/*"]
+prismguard = [
+    "config/triage.yaml",
+    "config/storage.yaml",
+    "seed/corpus/**/*",
+    "models/artifacts/prism-pi-v1/**/*",
+    "domains/**/*.yaml",
+]
+
+[tool.setuptools.exclude-package-data]
+prismguard = ["**/__pycache__/*", "**/*.pyc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

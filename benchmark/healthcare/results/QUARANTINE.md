@@ -13,7 +13,7 @@ The run in `quarantine-2026-07-08-mislabeled/` is **not** a valid healthcare ben
 
 ## Authoritative law results
 
-Use `benchmark/law/results/verified/` (after harness latency fix) or `benchmark/law/results/repro-run-*` for reproducibility checks.
+Use `benchmark/law/results/current/` for reproducibility checks.
 
 Do **not** cite `healthcare_holdout` numbers from the quarantined run in docs or pitch materials.
 

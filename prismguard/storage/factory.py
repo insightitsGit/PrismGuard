@@ -21,6 +21,8 @@ _REGISTRY: dict[str, BackendFactory] = {
 
 SUPPORTED_BACKENDS = tuple(_REGISTRY.keys())
 DEFAULT_BACKEND = "pgvector"
+OSS_DEFAULT_BACKEND = "memory"
+_PERSISTENT_BACKENDS = frozenset({"pgvector", "chroma", "pinecone", "weaviate"})
 
 
 def register_backend(name: str, factory: BackendFactory) -> None:
@@ -42,6 +44,10 @@ def create_storage(backend: str = DEFAULT_BACKEND, **config: Any) -> StorageBack
     if key not in _REGISTRY:
         supported = ", ".join(sorted(_REGISTRY))
         raise ValueError(f"Unknown storage backend {backend!r}. Supported: {supported}")
+    if key in _PERSISTENT_BACKENDS:
+        from prismguard.licensing.features import ENTERPRISE_PERSISTENCE, require_feature
+
+        require_feature(ENTERPRISE_PERSISTENCE)
     return _REGISTRY[key](dict(config))
 
 
@@ -49,7 +55,7 @@ def create_storage_from_env() -> StorageBackend:
     """Read PRISMGUARD_STORAGE_BACKEND and PRISMGUARD_STORAGE_DSN (or backend-specific vars)."""
     import os
 
-    backend = os.environ.get("PRISMGUARD_STORAGE_BACKEND", DEFAULT_BACKEND)
+    backend = os.environ.get("PRISMGUARD_STORAGE_BACKEND", OSS_DEFAULT_BACKEND)
     config: dict[str, Any] = {}
     if dsn := os.environ.get("PRISMGUARD_STORAGE_DSN"):
         config["dsn"] = dsn
