@@ -160,6 +160,15 @@ class RuntimeChecker:
             max_workers=max(1, int(os.environ.get("PRISMGUARD_CLASSIFIER_WORKERS", "2"))),
             thread_name_prefix="prismguard-clf",
         )
+        self._local_metrics = {
+            "check_total": 0,
+            "check_allow": 0,
+            "check_block": 0,
+            "check_gray": 0,
+            "check_error": 0,
+            "shadow_would_block": 0,
+            "gate_counts": {},
+        }
         if guard_model_required_at_init(self._config) and self._guard_model is None:
             raise ValueError(
                 "gray_zone_policy='escalate' requires a configured GuardModel at RuntimeChecker init"
@@ -221,15 +230,26 @@ class RuntimeChecker:
             )
             if needs_embed:
                 ingest_seed_vectors(storage, engine, emb, force=force_embed)
-        if guard_model is None and guard_model_required(config):
+        # Auto-load ONNX only when explicitly opted in (Dogfood1). YAML
+        # guard_model.enabled means "allowed", not "always load".
+        _onnx_env = os.environ.get("PRISMGUARD_USE_ONNX", "").strip().lower()
+        _onnx_opt_in = _onnx_env in ("1", "true", "yes", "on")
+        if guard_model is None and guard_model_required(config) and _onnx_opt_in:
             from prismguard.runtime.guard_model import create_guard_model
 
             guard_model = create_guard_model(config.guard_model)
         if guard_model is None and config.gray_zone_policy == "escalate":
             config = config.model_copy(update={"gray_zone_policy": "fail_closed"})
         if guard_model is None and config.guard_model.classifier_mode in ("parallel", "first", "hybrid"):
-            config = config.model_copy(update={"guard_model": config.guard_model.model_copy(update={"classifier_mode": "gray_only"})})
+            config = config.model_copy(
+                update={
+                    "guard_model": config.guard_model.model_copy(
+                        update={"enabled": False, "classifier_mode": "gray_only"}
+                    )
+                }
+            )
         return cls(
+
             storage,
             engine,
             embedder=emb,
@@ -618,13 +638,24 @@ class RuntimeChecker:
         extra_details: dict | None = None,
     ) -> CheckResult:
         """ONNX-only tail: no embed/ANN/fusion — classifier verdict + gray policy."""
-        if verdict is None and self._guard_model is not None:
+        # gray_only must not invoke the classifier outside the gray resolver.
+        mode = self._config.guard_model.classifier_mode
+        if (
+            verdict is None
+            and self._guard_model is not None
+            and self._config.guard_model.enabled
+            and mode in ("first", "parallel", "hybrid")
+        ):
             verdict = self._guard_model.check(prompt)
         base = dict(extra_details or {})
         if verdict is None:
             policy = self._config.gray_zone_policy
             decision: Decision = "allow" if policy == "fail_open" else "block"
             gate: ResolutionGate = "guard_model" if policy != "fail_open" else "fusion_allow"
+            # Rules/structural already passed; without a classifier verdict, allow.
+            if mode == "gray_only" or not self._config.guard_model.enabled:
+                decision = "allow"
+                gate = "fusion_allow"
             return CheckResult(
                 decision=decision,
                 resolution_gate=gate,
@@ -923,6 +954,32 @@ class RuntimeChecker:
         self._record_feedback(prompt=prompt, result=result, origin="guard_model")
         return result
 
+    def metrics_snapshot(self) -> dict[str, object]:
+        """In-process allow/block/gray/error counters for dogfood observability."""
+        return {
+            "check_total": self._local_metrics["check_total"],
+            "check_allow": self._local_metrics["check_allow"],
+            "check_block": self._local_metrics["check_block"],
+            "check_gray": self._local_metrics["check_gray"],
+            "check_error": self._local_metrics["check_error"],
+            "shadow_would_block": self._local_metrics["shadow_would_block"],
+            "resolution_gate_counts": dict(self._local_metrics["gate_counts"]),
+        }
+
+    def _record_local_metrics(self, result: CheckResult) -> None:
+        self._local_metrics["check_total"] += 1
+        if result.decision == "allow":
+            self._local_metrics["check_allow"] += 1
+        elif result.decision == "block":
+            self._local_metrics["check_block"] += 1
+        elif result.decision == "gray":
+            self._local_metrics["check_gray"] += 1
+        gates = self._local_metrics["gate_counts"]
+        gates[result.resolution_gate] = gates.get(result.resolution_gate, 0) + 1
+        shadow = (result.details or {}).get("shadow_onnx") or {}
+        if shadow.get("decision") == "block" and not shadow.get("enforced", True):
+            self._local_metrics["shadow_would_block"] += 1
+
     def check(self, prompt: str, *, session_id: str | None = None) -> CheckResult:
         profiler = StageProfiler.begin()
         wall_start = time.perf_counter()
@@ -946,6 +1003,7 @@ class RuntimeChecker:
             cached = cache.get(cache_key)
             if cached is not None:
                 cached.normalized_prompt = normalized_for_cache
+                self._record_local_metrics(cached)
                 return cached
         try:
             result = self._check_body(prompt, session_id=session_id)
@@ -968,7 +1026,11 @@ class RuntimeChecker:
                 )
             if cache is not None and cache_key is not None:
                 cache.put(cache_key, result)
+            self._record_local_metrics(result)
             return result
+        except Exception:
+            self._local_metrics["check_error"] += 1
+            raise
         finally:
             StageProfiler.end()
 

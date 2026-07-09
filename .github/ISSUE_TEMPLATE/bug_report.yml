@@ -12,7 +12,7 @@ body:
     attributes:
       label: PrismGuard version
       description: Output of `python -c "import prismguard; print(prismguard.__version__)"` or the PyPI pin you installed.
-      placeholder: "0.1.4"
+      placeholder: "0.1.5"
     validations:
       required: true
   - type: input
@@ -37,8 +37,8 @@ body:
     id: extras
     attributes:
       label: Install command / extras
-      description: Exact pip install line (e.g. `pip install "prismguard[guard-model]==0.1.4"`).
-      placeholder: pip install "prismguard[guard-model]==0.1.4"
+      description: Exact pip install line (e.g. `pip install "prismguard[guard-model]==0.1.5"`).
+      placeholder: pip install "prismguard[guard-model]==0.1.5"
     validations:
       required: true
   - type: textarea

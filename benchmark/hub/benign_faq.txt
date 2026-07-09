@@ -1,0 +1,301 @@
+Hi
+Hello
+Hey there
+Good morning
+How are you?
+What is PrismGuard?
+What does PrismGuard do?
+Tell me about your product
+How much does it cost?
+What is your pricing?
+Pricing for the starter plan
+Do you have a free tier?
+Is there a free trial?
+How do I install PrismGuard?
+How do I install the Python package?
+pip install instructions
+Where is the documentation?
+Link to the docs please
+How do I get started?
+Quick start guide
+What is an ONNX model?
+Do I need to download a model?
+Where is the model cached?
+What is a system prompt?
+What does a system prompt mean in LLM apps?
+How do system prompts work?
+Explain prompt injection in plain English
+What is prompt injection?
+How does the guard work?
+What is resolution_gate?
+How do I integrate with ChorusGraph?
+Can I use this with FastAPI?
+Does it work offline?
+Air-gapped install help
+How do I set PRISMGUARD_DOMAIN?
+What domains are supported?
+Difference between rules and ONNX
+When should I enable ONNX?
+Is prism-pi-v1 for general chat?
+Law domain vs general domain
+How do I run prismguard doctor?
+How do I run self-check?
+Where are the benchmarks?
+Can I use memory storage?
+What about Postgres storage?
+How do I scan model output?
+Output scanning example
+Session id support?
+Multi-tenant support?
+Enterprise license features
+Business tier HTTP sidecar
+How do I get a license?
+Contact sales
+Support email
+Status of the service
+Are you hiring?
+Company blog
+Release notes for 0.1.4
+Changelog
+GitHub repository
+PyPI package page
+Python version requirements
+Does it support Python 3.12?
+Windows install tips
+Linux install tips
+macOS install tips
+Docker deployment
+Kubernetes sidecar pattern
+Latency expectations for rules-only
+Warm vs cold start
+How to avoid Hugging Face downloads
+Offline mode flag
+HashEmbedder vs MiniLM
+What is fail open?
+What is fail closed?
+Gray zone policy meaning
+block_on gray routing
+How to log audit trails
+Compliance logging fields
+matched_category meaning
+decision_source field
+Can I customize rules?
+How do I import seed data?
+Domain pack overlay
+Holdout vs seeded data
+Training a new model
+Calibrating thresholds
+False positive rate goals
+Hub FAQ false positive gate
+Shadow ONNX mode
+PRISMGUARD_USE_ONNX flag
+PRISMGUARD_OFFLINE flag
+PRISMGUARD_SHADOW_ONNX
+create_checker_for_app web_chat
+create_checker_rules_only
+metrics_snapshot usage
+Health check endpoint
+Ready endpoint
+Metrics prometheus format
+Rate limits
+Timeouts
+Retry guidance
+Idempotency
+CORS for the API
+Authentication for the sidecar
+API key setup
+SSO options
+SOC2 status
+GDPR notes
+Data retention
+Do you store prompts?
+Privacy policy
+Terms of service
+Refund policy
+Invoice questions
+Billing contact
+Upgrade from free to paid
+Downgrade plan
+Cancel subscription
+Seat licensing
+Usage based pricing
+Volume discounts
+Academic discount
+Nonprofit pricing
+Partner program
+Reseller options
+White label
+OEM licensing
+SLA uptime
+Support SLAs
+On-call support
+Community Discord
+Stack Overflow tag
+Office hours
+Webinar schedule
+Conference talks
+Case studies
+Customer testimonials
+Security whitepaper
+Architecture overview
+Threat model summary
+How rules are authored
+How structural heuristics work
+Tier-1 vs Tier-2
+Fusion scoring explained
+Corpus ANN path
+When corpus path is disabled
+Prefer transformer false meaning
+Sentence transformers dependency
+Numpy dependency
+Optional extras list
+guard-model extra
+serve extra
+enterprise extra
+prism extra
+dev extra
+Benchmark law results
+Comparison to LLM Guard
+Comparison to LlamaFirewall
+Why audited gates matter
+Cheaper plus audited positioning
+Pilot checklist
+Production checklist
+Integration guide location
+Design doc location
+Contributing guide
+Code of conduct
+Security disclosure
+Report a vulnerability
+Feature request process
+Roadmap overview
+vNext dogfood plan
+Hub calibration criteria
+False negative hardening
+What is a jailbreak in AI safety literature?
+What does instruction override mean in security docs?
+Safe product questions about jailbreaks
+How to ask about system prompts safely
+Summarize the README
+Explain the quick example
+Help me choose a profile
+Which profile for a marketing site chat?
+Which profile for a legal pilot?
+Sidecar vs library
+In-process vs HTTP
+ChorusGraph guard node
+Fail open friendly docs
+Warm import under 500ms
+p95 under 50ms after warm
+Benign FAQ suite purpose
+Why Hi was blocked before
+Pricing FAQ false positives
+Law first model caveat
+Do not force ONNX on Azure yet
+Keep site regex defense in depth
+Thank you
+Thanks for the help
+That answers my question
+Have a nice day
+Bye
+Goodbye
+See you later
+One more question about install
+Can you repeat the pricing?
+Send me the docs link again
+I am evaluating vendors
+We are a startup
+We are an enterprise
+Need a quote for 100 seats
+Need a quote for 1000 seats
+Demo request
+Book a meeting
+Talk to an engineer
+Talk to sales
+Product feedback
+Bug report for docs typo
+Typo in the landing page
+Accessibility question
+Mobile app support
+Browser extension
+VS Code extension
+JetBrains plugin
+CLI only usage
+Library only usage
+No HTTP needed
+Local laptop demo
+Classroom workshop
+Hackathon setup
+Open source contribution
+License Apache 2.0
+NOTICE file
+Third party notices
+Tokenizer license
+Model card location
+Calibration json meaning
+Uncertain low high thresholds
+Veto threshold meaning
+Disagreement escalation
+Classifier first mode
+Parallel classifier mode
+Gray only mode
+Hybrid mode
+Judge rate cap
+Semantic cache
+TTL seconds
+Session memory
+Tenant lexicon
+Restricted severity boost
+Internal severity boost
+Category overrides
+Block threshold tuning
+Allow threshold tuning
+Benign allow floor
+Benign margin delta
+Corpus match override
+Structural block threshold
+Structural allow threshold
+Weak signal floor
+Min weak signals for gray
+Community confidence floor
+W sim fusion weight
+W graph fusion weight
+W rule fusion weight
+W sev fusion weight
+W clf fusion weight
+W benign fusion weight
+W session fusion weight
+Normalization obfuscation depth
+Max prompt length
+Max output scan length
+Unicode normalization
+Homoglyph handling
+Base64 blob detection
+URL exfiltration patterns
+Output scan patterns
+Injection delimiter patterns
+Role assignment patterns
+Refusal suppression patterns
+Exfiltration patterns
+Benign framing patterns
+Legal topic fragments
+Judge confidence floor
+Accept guard when capped
+Tighten block threshold delta
+Tighten weak signal floor delta
+Artifact id prism-pi-v1
+Artifact path override
+Model download URL env
+Cache directory location
+Windows cache path
+Linux cache path
+Doctor JSON report
+Self check command
+Eval holdout command
+Import seed command
+Init domain command
+Profile command
+Serve command
+Check command
+Help command
+Version command

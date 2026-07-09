@@ -43,11 +43,11 @@ class StructuralConfig(BaseModel):
 
 
 class EmbeddingConfig(BaseModel):
-    """Corpus embedding path (MiniLM + ANN + fusion). When disabled, check() uses ONNX + rules only."""
-    corpus_path_enabled: bool = True
+    """Corpus embedding path (MiniLM + ANN + fusion). When disabled, check() uses rules (+ optional ONNX)."""
+    corpus_path_enabled: bool = False
     chunk_overlap_ratio: float = 0.25
     suspicious_ngram_floor: float = 0.15
-    prefer_transformer: bool = True
+    prefer_transformer: bool = False
     model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
 
 
@@ -147,11 +147,17 @@ def _merge_domain_triage(base: dict, domain: str) -> dict:
     if not isinstance(overlay, dict):
         return base
     merged = dict(base)
-    for key in ("triage", "fusion", "benign_fast_path", "guard_model", "tenant_context", "structural"):
+    for key in ("triage", "fusion", "benign_fast_path", "guard_model", "tenant_context", "structural", "embedding"):
         if key in overlay:
             section = dict(merged.get(key) or {})
-            section.update(overlay[key])
-            merged[key] = section
+            if isinstance(overlay[key], dict):
+                section.update(overlay[key])
+                merged[key] = section
+            else:
+                merged[key] = overlay[key]
+    for key in ("gray_zone_policy", "gray_terminal"):
+        if key in overlay:
+            merged[key] = overlay[key]
     if "categories" in overlay:
         cats = dict(merged.get("categories") or {})
         cats.update(overlay["categories"])

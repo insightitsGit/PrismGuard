@@ -31,6 +31,9 @@ def make_guard_handler(
     Build a ChorusGraph-compatible node handler: read ``text_key`` from state,
     run PrismGuard, write guard metadata back, set ``blocked`` when appropriate.
 
+    By default only ``decision == "block"`` sets ``blocked``. Gray continues the
+    graph unless you pass ``block_on=frozenset({"block", "gray"})``.
+
     Example graph::
 
         START → guard → [blocked → END | retrieve → writer → END]
@@ -81,38 +84,14 @@ def route_after_guard(state: dict[str, Any]) -> str:
 
 
 def create_checker_from_env() -> Any:
-    """Build a RuntimeChecker from environment (domain, storage, seed profile)."""
-    import os
+    """Build a RuntimeChecker from environment (dogfood-safe: ONNX opt-in only)."""
+    from prismguard.runtime.factory import create_checker_from_env as _create
 
-    from prismguard.config.loader import load_triage_config
-    from prismguard.runtime.check import RuntimeChecker
-    from prismguard.runtime.guard_model import create_guard_model
-    from prismguard.runtime.llm_judge import create_llm_judge
-    from prismguard.seed import import_bundled_seed, load_bundled_seed
-    from prismguard.storage import create_storage_from_env
-    from prismguard.taxonomy.embedder import create_embedder_from_config
+    return _create()
 
-    domain = os.environ.get("PRISMGUARD_DOMAIN", "law")
-    profile = os.environ.get("PRISMGUARD_SEED_PROFILE", "authored")
-    storage = create_storage_from_env()
-    parsed = load_bundled_seed(profile=profile)
-    import_bundled_seed(storage, profile=profile)
-    cfg = load_triage_config(domain=domain)
-    embedder = create_embedder_from_config(cfg)
-    guard_model = create_guard_model(cfg.guard_model) if cfg.guard_model.enabled else None
-    llm_judge = None
-    if cfg.gray_zone_policy == "escalate" and guard_model is not None:
-        llm_judge = create_llm_judge(
-            prefer_openai=False,
-            rate_cap_per_minute=cfg.judge.rate_cap_per_minute,
-            embedder=embedder,
-            cache_similarity_threshold=cfg.cache.semantic_cache_threshold,
-        )
-    return RuntimeChecker.from_storage(
-        storage,
-        parsed,
-        embedder=embedder,
-        config=cfg,
-        guard_model=guard_model,
-        llm_judge=llm_judge,
-    )
+
+def create_checker_for_app(profile: str = "web_chat", **kwargs: Any) -> Any:
+    """See ``prismguard.runtime.factory.create_checker_for_app``."""
+    from prismguard.runtime.factory import create_checker_for_app as _create
+
+    return _create(profile, **kwargs)  # type: ignore[arg-type]

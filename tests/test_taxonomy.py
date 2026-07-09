@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from prismguard.runtime.check import RuntimeChecker
@@ -8,6 +10,12 @@ from prismguard.taxonomy.mapping import build_mapping_from_parsed_seed
 from prismguard.taxonomy.pipeline import run_post_seed_pipeline
 
 prismrag = pytest.importorskip("prismrag_patch")
+
+
+@pytest.fixture(autouse=True)
+def _taxonomy_not_offline(monkeypatch):
+    """Post-seed HashEmbedder ingest runs when not offline (Dogfood1)."""
+    monkeypatch.delenv("PRISMGUARD_OFFLINE", raising=False)
 
 
 def test_mapping_assigns_direct_override_category() -> None:

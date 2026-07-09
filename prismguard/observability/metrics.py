@@ -12,8 +12,10 @@ class GuardMetrics:
     check_total: int = 0
     check_allow: int = 0
     check_block: int = 0
+    check_gray: int = 0
     scan_output_total: int = 0
     errors: int = 0
+    shadow_would_block: int = 0
     gate_counts: Dict[str, int] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -24,7 +26,13 @@ class GuardMetrics:
                 self.check_allow += 1
             elif decision == "block":
                 self.check_block += 1
+            elif decision == "gray":
+                self.check_gray += 1
             self.gate_counts[gate] = self.gate_counts.get(gate, 0) + 1
+
+    def record_shadow_would_block(self) -> None:
+        with self._lock:
+            self.shadow_would_block += 1
 
     def record_scan(self) -> None:
         with self._lock:
@@ -40,8 +48,10 @@ class GuardMetrics:
                 "check_total": self.check_total,
                 "check_allow": self.check_allow,
                 "check_block": self.check_block,
+                "check_gray": self.check_gray,
                 "scan_output_total": self.scan_output_total,
                 "errors": self.errors,
+                "shadow_would_block": self.shadow_would_block,
                 "resolution_gate_counts": dict(self.gate_counts),
             }
 
@@ -57,6 +67,9 @@ class GuardMetrics:
             "# HELP prismguard_check_block_total Blocked inputs.",
             "# TYPE prismguard_check_block_total counter",
             f"prismguard_check_block_total {snap['check_block']}",
+            "# HELP prismguard_check_gray_total Gray-zone inputs.",
+            "# TYPE prismguard_check_gray_total counter",
+            f"prismguard_check_gray_total {snap['check_gray']}",
             "# HELP prismguard_scan_output_total Output scans served.",
             "# TYPE prismguard_scan_output_total counter",
             f"prismguard_scan_output_total {snap['scan_output_total']}",

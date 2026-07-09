@@ -104,13 +104,41 @@ rules:
     severity: high
     rationale: canonical direct-override phrasing
     created_by: seed-v0
+  - rule_id: R-0144
+    pattern: 'disregard (your |the )?(rules|policies|safety|guidelines)'
+    pattern_type: regex
+    category_slug: direct_instruction_override
+    severity: high
+    rationale: paraphrased disregard-rules jailbreak (hub dogfood)
+    created_by: seed-v0-dogfood1
+  - rule_id: R-0145
+    pattern: '(?i)^\s*system\s*:\s*.{0,80}\b(override|ignore|disregard)\b'
+    pattern_type: regex
+    category_slug: direct_instruction_override
+    severity: high
+    rationale: "fake SYSTEM: policy override prefix (not product FAQ about system prompts)"
+    created_by: seed-v0-dogfood1
+  - rule_id: R-0146
+    pattern: 'override all (policies|rules|safety|restrictions)'
+    pattern_type: regex
+    category_slug: direct_instruction_override
+    severity: high
+    rationale: policy override phrasing
+    created_by: seed-v0-dogfood1
   - rule_id: R-0201
-    pattern: 'developer mode|dan mode|no (restrictions|filters|content policy)'
+    pattern: 'developer mode|dan mode|\bDAN\b|no (restrictions|filters|content policy)'
     pattern_type: regex
     category_slug: roleplay_jailbreak
     severity: high
-    rationale: common jailbreak persona framing
+    rationale: common jailbreak persona framing including DAN
     created_by: seed-v0
+  - rule_id: R-0202
+    pattern: 'you are now .{0,40}\bDAN\b|ignore safety'
+    pattern_type: regex
+    category_slug: roleplay_jailbreak
+    severity: high
+    rationale: DAN + ignore safety paraphrases
+    created_by: seed-v0-dogfood1
   - rule_id: R-0301
     pattern: 'repeat everything above|print your system prompt|what are your (exact )?instructions'
     pattern_type: regex

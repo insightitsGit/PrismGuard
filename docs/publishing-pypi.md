@@ -68,33 +68,31 @@ Expected: wheel **under 100 MB**, `model.onnx in wheel 0`, `cli_check True`, `be
 ```powershell
 $env:TWINE_USERNAME = "__token__"
 $env:TWINE_PASSWORD = "pypi-YOUR_TOKEN_HERE"
-twine upload dist/prismguard-0.1.4-py3-none-any.whl
-twine upload dist/prismguard-0.1.4.tar.gz
+twine upload dist/prismguard-0.1.5-py3-none-any.whl
+twine upload dist/prismguard-0.1.5.tar.gz
 ```
 
 Upload the **wheel first**; it is smaller and validates packaging.
 
-## What ships in 0.1.4
+## What ships in 0.1.5
 
 | Item | Included |
 |------|----------|
+| `create_checker_for_app` / `web_chat` | yes — Dogfood1 |
+| `PRISMGUARD_USE_ONNX=1` opt-in (breaking vs surprise-ONNX) | yes |
+| Hub benign FAQ gate + shadow ONNX | yes |
 | `prismguard check` CLI | yes |
-| `prismguard eval self-check` | yes |
-| Base install (zero extras) CLI entry points | yes — Buglib1 fix |
-| `POST /v1/scan-output` `resolution_gate` | yes — QA-001 fix |
-| Signed license validator (`enterprise` extra) | yes |
-| HTTP serve + `/metrics` (`serve` extra) | yes |
+| Base install (zero extras) CLI entry points | yes |
 | ONNX metadata (tokenizer, model card, calibration) | yes (in wheel) |
-| ONNX `model.onnx` weights | **no** — `prismguard-model download` or auto-fetch on first use |
-| `prism-pi-v2` artifacts | **no** (repo dev only) |
-| `benchmark/` harness | **no** |
+| ONNX `model.onnx` weights | **no** — reuse v0.1.2 GitHub asset |
+| `benchmark/` harness | **no** (hub FAQ text is for CI/tests only) |
 
 ## Post-publish
 
-1. Confirm package live: `pip install "prismguard==0.1.4"` then `prismguard --help` and `prismguard doctor` (no numpy crash).
-2. Confirm with extras: `pip install "prismguard[guard-model]==0.1.4" && prismguard-model download`
-3. Yank broken `0.1.3` on PyPI (Director go-ahead): reason e.g. `Base install crashes without numpy; use 0.1.4`
-4. Tag: `git tag v0.1.4 && git push origin v0.1.4`
+1. Confirm package live: `pip install "prismguard==0.1.5"` then `prismguard --help` and `prismguard doctor`.
+2. Confirm with extras: `pip install "prismguard[guard-model]==0.1.5" && prismguard-model download`
+3. Update README pins/URLs to 0.1.5
+4. Tag: `git tag v0.1.5 && git push origin v0.1.5`
 
 ## Customer install
 

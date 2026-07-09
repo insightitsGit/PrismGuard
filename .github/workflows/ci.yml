@@ -23,6 +23,8 @@ jobs:
           pip install -e ".[guard-model,serve,enterprise,dev]"
       - name: Run tests
         run: python -m pytest tests/ -q --tb=short
+      - name: Hub benign FAQ gate (rules-only)
+        run: python -m pytest tests/test_hub_benign_faq.py -q --tb=short
       - name: Verify wheel build (no ONNX in package)
         run: |
           pip install build

@@ -180,13 +180,22 @@ class SeedImporter:
         )
 
         if not options.skip_taxonomy:
+            import os
+
+            from prismguard.config.loader import load_triage_config
             from prismguard.taxonomy.pipeline import run_post_seed_pipeline
 
-            report.taxonomy = run_post_seed_pipeline(
-                self._storage,
-                parsed,
-                force_embed=options.force_embed,
-            )
+            offline = os.environ.get("PRISMGUARD_OFFLINE", "").strip().lower() in ("1", "true", "yes")
+            # Offline: skip taxonomy entirely (no HF, fastest dogfood init).
+            # Online with corpus_path_enabled=false: still run HashEmbedder ingest (no HF).
+            if not offline:
+                cfg = load_triage_config()
+                report.taxonomy = run_post_seed_pipeline(
+                    self._storage,
+                    parsed,
+                    force_embed=options.force_embed,
+                    config=cfg,
+                )
 
         return report
 

@@ -9,6 +9,12 @@ from prismguard.storage import create_storage
 FIXTURES = Path(__file__).parent / "fixtures" / "seed"
 
 
+@pytest.fixture(autouse=True)
+def _seed_import_not_offline(monkeypatch):
+    """Taxonomy HashEmbedder ingest is skipped only when PRISMGUARD_OFFLINE=1."""
+    monkeypatch.delenv("PRISMGUARD_OFFLINE", raising=False)
+
+
 @pytest.fixture
 def taxonomy_yaml(tmp_path: Path) -> Path:
     path = tmp_path / "taxonomy.yaml"

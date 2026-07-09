@@ -62,7 +62,7 @@ class HashEmbedder:
         return _hash_to_vector(f"cat:{category_slug}:{text}", self.category_dim)
 
 
-def create_embedder(prefer_transformer: bool = True, *, model_name: str | None = None) -> Embedder:
+def create_embedder(prefer_transformer: bool = False, *, model_name: str | None = None) -> Embedder:
     if prefer_transformer:
         try:
             return SentenceTransformerEmbedder(model_name=model_name or "sentence-transformers/all-MiniLM-L6-v2")
@@ -73,7 +73,7 @@ def create_embedder(prefer_transformer: bool = True, *, model_name: str | None =
 
 def create_embedder_from_config(cfg) -> Embedder:
     embedder = create_embedder(
-        prefer_transformer=getattr(cfg.embedding, "prefer_transformer", True),
+        prefer_transformer=getattr(cfg.embedding, "prefer_transformer", False),
         model_name=getattr(cfg.embedding, "model_name", None),
     )
     return maybe_cache_embedder(embedder)

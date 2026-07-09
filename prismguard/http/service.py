@@ -11,8 +11,6 @@ from pydantic import BaseModel, Field
 from prismguard.licensing.features import ENTERPRISE_HTTP, require_feature
 from prismguard.observability.metrics import get_metrics
 from prismguard.runtime.output_scan import scan_output
-from prismguard.seed import import_bundled_seed, load_bundled_seed
-from prismguard.storage import create_storage_from_env
 
 
 class CheckRequest(BaseModel):
@@ -55,36 +53,11 @@ def _get_checker():
     global _checker
     if _checker is not None:
         return _checker
-    from prismguard.runtime.check import RuntimeChecker
+    from prismguard.runtime.factory import create_checker_from_env
 
-    domain = os.environ.get("PRISMGUARD_DOMAIN", "law")
-    storage = create_storage_from_env()
-    parsed = load_bundled_seed(profile=os.environ.get("PRISMGUARD_SEED_PROFILE", "authored"))
-    import_bundled_seed(storage, profile=os.environ.get("PRISMGUARD_SEED_PROFILE", "authored"))
-    from prismguard.config.loader import load_triage_config
-    from prismguard.runtime.guard_model import create_guard_model
-    from prismguard.runtime.llm_judge import create_llm_judge
-    from prismguard.taxonomy.embedder import create_embedder_from_config
-
-    cfg = load_triage_config(domain=domain)
-    embedder = create_embedder_from_config(cfg)
-    guard_model = create_guard_model(cfg.guard_model) if cfg.guard_model.enabled else None
-    llm_judge = None
-    if cfg.gray_zone_policy == "escalate" and guard_model is not None:
-        llm_judge = create_llm_judge(
-            prefer_openai=False,
-            rate_cap_per_minute=cfg.judge.rate_cap_per_minute,
-            embedder=embedder,
-            cache_similarity_threshold=cfg.cache.semantic_cache_threshold,
-        )
-    _checker = RuntimeChecker.from_storage(
-        storage,
-        parsed,
-        embedder=embedder,
-        config=cfg,
-        guard_model=guard_model,
-        llm_judge=llm_judge,
-    )
+    # Sidecar defaults: ONNX only with PRISMGUARD_USE_ONNX=1; domain not law-by-default.
+    os.environ.setdefault("PRISMGUARD_APP_PROFILE", "sidecar")
+    _checker = create_checker_from_env()
     return _checker
 
 
@@ -101,7 +74,7 @@ def create_app():
 
     app = FastAPI(
         title="PrismGuard API",
-        version="0.1.4",
+        version="0.1.5",
         description="Audited prompt-injection guard service (Business tier).",
     )
 
@@ -111,10 +84,12 @@ def create_app():
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
-        domain = os.environ.get("PRISMGUARD_DOMAIN", "law")
+        domain = os.environ.get("PRISMGUARD_DOMAIN", "").strip() or "core"
         try:
             checker = _get_checker()
-            ready = checker._guard_model is None or checker._guard_model.is_ready  # noqa: SLF001
+            enforce = getattr(checker, "_enforce", checker)
+            gm = getattr(enforce, "_guard_model", None)
+            ready = gm is None or bool(getattr(gm, "is_ready", True))
         except Exception:
             ready = False
         return HealthResponse(

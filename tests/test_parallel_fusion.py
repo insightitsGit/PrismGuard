@@ -121,9 +121,13 @@ def test_gray_only_mode_does_not_fuse_classifier_on_confident_allow() -> None:
     guard = CountingGuardModel(StubGuardModel())
     storage = create_storage("memory")
     engine = build_mapping_from_parsed_seed(load_bundled_seed(profile="authored"))
+    from prismguard.config.loader import EmbeddingConfig
+
     config = TriageConfig(
         gray_zone_policy="escalate",
         guard_model=GuardModelConfig(classifier_mode="gray_only"),
+        # gray_only fusion semantics require the corpus/fusion path (not ONNX-only).
+        embedding=EmbeddingConfig(corpus_path_enabled=True, prefer_transformer=False),
     )
     checker = RuntimeChecker(
         storage,

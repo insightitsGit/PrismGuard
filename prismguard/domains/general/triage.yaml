@@ -1,0 +1,10 @@
+# General / hub chat — rules-first friendly; ONNX still opt-in via PRISMGUARD_USE_ONNX=1.
+gray_zone_policy: fail_open
+embedding:
+  corpus_path_enabled: false
+  prefer_transformer: false
+guard_model:
+  enabled: true
+  classifier_mode: first
+  # prism-pi-v1 is law-bench-oriented; do not market as calibrated for general chat.
+  artifact_id: prism-pi-v1

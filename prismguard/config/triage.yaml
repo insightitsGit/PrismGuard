@@ -4,16 +4,19 @@
 gray_zone_policy: escalate  # escalate | fail_open | fail_closed — requires Guard Model artifact
 
 embedding:
-  corpus_path_enabled: false  # skip MiniLM + ANN + fusion; ONNX + rules/structural only
+  corpus_path_enabled: false  # skip MiniLM + ANN + fusion; rules/structural (+ optional ONNX)
   chunk_overlap_ratio: 0.25
   suspicious_ngram_floor: 0.15
-  prefer_transformer: true
+  # Keep false when corpus_path_enabled is false — avoids HF Hub pulls on rules-only init.
+  prefer_transformer: false
   model_name: sentence-transformers/all-MiniLM-L6-v2
 
 guard_model:
+  # Library factories require PRISMGUARD_USE_ONNX=1 to load ONNX (opt-in). YAML enabled
+  # still means "allowed when env opts in"; web_chat profile forces off.
   enabled: true
   classifier_mode: first  # first | parallel | gray_only | hybrid — hybrid skips ONNX on tier1/structural blocks
-  artifact_id: prism-pi-v1
+  artifact_id: prism-pi-v1  # law-bench-oriented; not calibrated for general product FAQ chat
   artifact_path: ""  # optional override; or set PRISMGUARD_GUARD_MODEL_PATH
   uncertain_low: 0.35
   uncertain_high: 0.65

@@ -2,43 +2,16 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from prismguard.runtime.check import CheckResult, RuntimeChecker
 
 
 def _checker() -> RuntimeChecker:
-    from prismguard.config.loader import load_triage_config
-    from prismguard.runtime.guard_model import create_guard_model
-    from prismguard.runtime.llm_judge import create_llm_judge
-    from prismguard.seed import import_bundled_seed, load_bundled_seed
-    from prismguard.storage import create_storage
-    from prismguard.taxonomy.embedder import create_embedder_from_config
+    """CLI uses the same dogfood-safe env factory (ONNX opt-in, domain not law-by-default)."""
+    from prismguard.runtime.factory import create_checker_from_env
 
-    domain = os.environ.get("PRISMGUARD_DOMAIN", "law")
-    storage = create_storage("memory")
-    parsed = load_bundled_seed(profile=os.environ.get("PRISMGUARD_SEED_PROFILE", "authored"))
-    import_bundled_seed(storage, profile=os.environ.get("PRISMGUARD_SEED_PROFILE", "authored"))
-    cfg = load_triage_config(domain=domain)
-    embedder = create_embedder_from_config(cfg)
-    guard_model = create_guard_model(cfg.guard_model) if cfg.guard_model.enabled else None
-    llm_judge = None
-    if cfg.gray_zone_policy == "escalate" and guard_model is not None:
-        llm_judge = create_llm_judge(
-            prefer_openai=False,
-            rate_cap_per_minute=cfg.judge.rate_cap_per_minute,
-            embedder=embedder,
-            cache_similarity_threshold=cfg.cache.semantic_cache_threshold,
-        )
-    return RuntimeChecker.from_storage(
-        storage,
-        parsed,
-        embedder=embedder,
-        config=cfg,
-        guard_model=guard_model,
-        llm_judge=llm_judge,
-    )
+    return create_checker_from_env()
 
 
 def format_check_result(result: CheckResult) -> str:
@@ -55,6 +28,9 @@ def format_check_result(result: CheckResult) -> str:
         lines.append(f"confidence={round(float(confidence), 4)}")
     if result.matched_category:
         lines.append(f"matched_category={result.matched_category}")
+    shadow = details.get("shadow_onnx")
+    if isinstance(shadow, dict):
+        lines.append(f"shadow_onnx={shadow.get('decision', shadow.get('error', 'n/a'))}")
     return "\n".join(lines)
 
 
@@ -63,4 +39,8 @@ def run_check(text: str) -> CheckResult:
     try:
         return checker.check(text)
     finally:
-        checker._storage.close()  # noqa: SLF001
+        storage = getattr(checker, "_storage", None)
+        if storage is None and hasattr(checker, "_enforce"):
+            storage = getattr(checker._enforce, "_storage", None)  # noqa: SLF001
+        if storage is not None:
+            storage.close()

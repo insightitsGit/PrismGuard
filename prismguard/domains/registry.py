@@ -30,6 +30,7 @@ def get_domain_pack(domain: str) -> DomainPack:
         raise ValueError(f"Unknown domain pack {domain!r}. Available: {known}")
     holdout = root / "holdout.yaml"
     labels = {
+        "general": "General / web chat",
         "law": "Legal / compliance",
         "healthcare": "Healthcare / HIPAA",
         "finance": "Finance / banking",

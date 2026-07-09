@@ -20,12 +20,15 @@ class StructuralResult:
 _OVERRIDE_PATTERNS = (
     re.compile(r"\bignore\b.{0,30}\b(previous|prior|above)\b.{0,20}\binstructions?\b", re.I),
     re.compile(r"\bdisregard\b.{0,20}\b(everything|all)\b", re.I),
+    re.compile(r"\bdisregard\b.{0,40}\b(your |the )?(rules|policies|safety|guidelines)\b", re.I),
     re.compile(r"\bnew system instructions?\b", re.I),
     re.compile(r"\bforget\b.{0,20}\b(rules|instructions|safety training)\b", re.I),
     re.compile(r"\bbypass\b.{0,40}\b(privilege|confidentiality|restrictions?)\b", re.I),
-    re.compile(r"\boverride\b.{0,30}\b(confidentiality|privilege|restrictions?)\b", re.I),
+    re.compile(r"\boverride\b.{0,30}\b(confidentiality|privilege|restrictions?|all policies|all rules)\b", re.I),
+    re.compile(r"\boverride all (policies|rules|safety|restrictions)\b", re.I),
     re.compile(r"\bmake an exception\b.{0,40}\b(for me|confidential|privilege)\b", re.I),
     re.compile(r"\brepeat\b.{0,30}\b(instructions?|everything)\b.{0,20}\babove\b", re.I),
+    re.compile(r"\bignore safety\b", re.I),
 )
 
 _ROLE_PATTERNS = (
@@ -35,6 +38,7 @@ _ROLE_PATTERNS = (
     re.compile(r"\bimagine you are\b.{0,40}\b(rogue|associate|counsel|judge)\b", re.I),
     re.compile(r"\bplay the judge\b", re.I),
     re.compile(r"\bdeveloper mode\b", re.I),
+    re.compile(r"\bdan mode\b|\byou are now\b.{0,40}\bDAN\b|\bDAN\b.{0,40}\bignore\b", re.I),
     re.compile(r"\bno restrictions\b", re.I),
     re.compile(r"\bno ethics duties\b", re.I),
     re.compile(r"\bwithout (any )?content policy\b", re.I),
@@ -125,6 +129,8 @@ _DELIMITER_PATTERNS = (
     re.compile(r"\[\[system\]\]", re.I),
     re.compile(r"<\|system\|>", re.I),
     re.compile(r"###\s*system\b", re.I),
+    # Fake SYSTEM: override prefix — avoid matching "What is a system prompt?" product FAQs.
+    re.compile(r"(?i)^\s*system\s*:\s*.{0,120}\b(override|ignore|disregard|jailbreak)\b"),
 )
 
 _LEGAL_TOPIC_RE = re.compile(
@@ -270,6 +276,9 @@ def analyze_structural(
         if pattern.search(text):
             attack += 0.30
             hits.append("role_assignment")
+            if re.search(r"\bDAN\b|dan mode|ignore safety", text, re.I):
+                attack = max(attack, 0.88)
+                hits.append("dan_jailbreak")
             break
     for pattern in _REFUSAL_PATTERNS:
         if pattern.search(text):
@@ -302,6 +311,10 @@ def analyze_structural(
         if pattern.search(text):
             attack += 0.25
             hits.append("injection_delimiter")
+            # Fake SYSTEM: override prefix — strong block (not product FAQ about system prompts).
+            if re.search(r"(?i)^\s*system\s*:\s*.{0,120}\b(override|ignore|disregard|jailbreak)\b", text):
+                attack = max(attack, 0.88)
+                hits.append("fake_system_override")
             break
 
     attack += _encoded_blob_score(text)
