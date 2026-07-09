@@ -1,10 +1,12 @@
+<p align="center">
+  <img src="docs/assets/hero.svg" alt="PrismGuard — prompt injection firewall for production LLM applications" width="100%"/>
+</p>
+
 # PrismGuard
 
-### Open-source prompt injection firewall for production LLM applications
+**Protect your LLM before malicious prompts ever reach it.**
 
-**Stop prompt injection before it reaches your LLM.**
-
-PrismGuard is an Apache-2.0 guardrail library for AI SaaS, RAG systems, and enterprise copilots. Unlike scanners that only return a probability, **every decision explains why a prompt was allowed or blocked** — so security and compliance teams can audit what happened.
+PrismGuard is an open-source prompt injection firewall for production AI systems. Unlike scanners that only return a probability, **every decision explains why a prompt was allowed or blocked** — so security and compliance teams can audit what happened.
 
 [![PyPI version](https://img.shields.io/pypi/v/prismguard.svg)](https://pypi.org/project/prismguard/)
 [![Python](https://img.shields.io/pypi/pyversions/prismguard.svg)](https://pypi.org/project/prismguard/)
@@ -15,50 +17,65 @@ PrismGuard is an Apache-2.0 guardrail library for AI SaaS, RAG systems, and ente
 
 ✅ Self-hosted &nbsp;·&nbsp; ✅ Explainable decisions &nbsp;·&nbsp; ✅ ONNX local inference &nbsp;·&nbsp; ✅ Optional LLM Judge &nbsp;·&nbsp; ✅ Built for production
 
-[Install](#install) · [Quick example](#quick-example) · [Documentation](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
+[Quick install](#install) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
+
+### Designed for
+
+**AI startups** · **Enterprise copilots** · **Legal AI** · **RAG systems** · **Internal assistants**
 
 ---
 
 ## What is PrismGuard?
 
-PrismGuard sits **in front of your LLM** and classifies each user prompt (and optionally model output) before harm reaches your agent or RAG pipeline.
+PrismGuard sits **in front of your LLM** and classifies each user prompt before harm reaches your agent or RAG pipeline.
 
-| Feature | PrismGuard |
-|---------|:----------:|
-| Prompt injection detection | ✅ |
-| Self-hosted (data stays on your infra) | ✅ |
-| Explainable decisions (`resolution_gate`) | ✅ |
-| ONNX local model (`prism-pi-v1`) | ✅ |
-| Optional LLM Judge escalation | ✅ |
-| Legal domain pack (verified) | ✅ |
-| HTTP API (`prismguard serve`) | Business |
-| [ChorusGraph](https://github.com/insightitsGit/ChorusGraph) integration | ✅ |
+| Capability | Why it matters |
+|------------|----------------|
+| Prompt injection detection | Blocks jailbreaks before inference |
+| Explainable decisions | Every decision is auditable (`resolution_gate`) |
+| Self-hosted deployment | Data stays on your infrastructure |
+| ONNX local model (`prism-pi-v1`) | No external API required for classification |
+| LLM Judge | Escalates only uncertain cases (~7% on law bench) |
+| Legal domain pack | Tuned and verified for legal workflows |
+| HTTP API (`prismguard serve`) | Production sidecar (Business tier) |
+| [ChorusGraph](https://github.com/insightitsGit/ChorusGraph) integration | Native guard node for agent stacks |
 
 ---
 
-## Who is this for?
+## Why not LLM Guard?
 
-- **AI SaaS** shipping chat or copilots to customers  
-- **Enterprise copilots** with audit and procurement requirements  
-- **RAG systems** ingesting untrusted documents or user text  
-- **Legal AI** workflows (verified law domain pack)  
-- **Compliance platforms** that need decision logs, not opaque scores  
-- **Internal LLMs** exposed to employees or partners  
+Positioning — not a benchmark shootout.
+
+| | PrismGuard | [LLM Guard](https://github.com/protectai/llm-guard) |
+|---|------------|-----------------------------------------------------|
+| **Product shape** | Opinionated firewall | Security toolkit |
+| **Classifier** | Built-in ONNX model | Bring your own classifier |
+| **Output** | Explainable decisions + audit gates | Mostly classification outputs |
+| **Focus** | Compliance & production guardrails | General-purpose scanning |
+| **Best for** | Teams that need auditable allow/block logs | Teams assembling custom guard pipelines |
+
+We complement the ecosystem — PrismGuard is the **firewall layer** when you need decisions your security team can defend.
 
 ---
 
 ## Install
 
-```bash
-pip install prismguard
-```
-
-For the bundled ONNX classifier (recommended):
+### Quick install (recommended)
 
 ```bash
 pip install "prismguard[guard-model]"
 prismguard init --domain law
 ```
+
+You're ready. Run `prismguard check "your prompt here"`.
+
+### Minimal install
+
+```bash
+pip install prismguard
+```
+
+Rules-only path — add `guard-model` when you want the bundled ONNX classifier.
 
 ---
 
@@ -94,8 +111,6 @@ result = run_check("What SEC rules apply to material contract disclosure?")
 print(format_check_result(result))
 ```
 
-Embed in your app:
-
 ```python
 from prismguard.runtime.check import RuntimeChecker
 from prismguard.seed import import_bundled_seed, load_bundled_seed
@@ -118,24 +133,15 @@ if result.decision == "block":
 ![PrismGuard pipeline](docs/assets/architecture.svg)
 
 ```
-User prompt
-    ↓
-PrismGuard
-    ↓
-Tier-1 rules → Structural analysis → ONNX model → (optional) LLM Judge
-    ↓
-ALLOW → your LLM          BLOCK → safe response / audit log
+User → PrismGuard → Rules / ONNX / (optional) Judge → ALLOW → Your LLM
+                                                   └→ BLOCK → audit log
 ```
-
-Every path records **`decision`**, **`resolution_gate`**, and **`decision_source`** for compliance logs.
 
 Details: [`docs/prismguard-design.md`](docs/prismguard-design.md) · [`docs/integration-guide.md`](docs/integration-guide.md)
 
 ---
 
 ## Part of the Prism AI stack
-
-PrismGuard is the **security layer** in the Insight IT Prism family:
 
 ```
                     ChorusGraph
@@ -152,12 +158,39 @@ PrismGuard is the **security layer** in the Insight IT Prism family:
 | Project | Role | Link |
 |---------|------|------|
 | **PrismGuard** | Prompt-injection firewall | [GitHub](https://github.com/insightitsGit/PrismGaurd) |
-| **ChorusGraph** | Native agent orchestration runtime | [GitHub](https://github.com/insightitsGit/ChorusGraph) |
-| **PrismRAG** | Taxonomy-aware RAG retrieval | [GitHub](https://github.com/aminparva84/InsightPrismRAG) |
-| **PrismCortex** | Compliance-grade agent memory | [GitHub](https://github.com/insightitsGit/PrismCortex) |
+| **ChorusGraph** | Agent orchestration runtime | [GitHub](https://github.com/insightitsGit/ChorusGraph) |
+| **PrismRAG** | Taxonomy-aware RAG | [GitHub](https://github.com/aminparva84/InsightPrismRAG) |
+| **PrismCortex** | Compliance-grade memory | [GitHub](https://github.com/insightitsGit/PrismCortex) |
 | **PrismLib** | In-process runtime cache | [GitHub](https://github.com/insightitsGit/prismlib) |
 
-Plug PrismGuard into ChorusGraph: `prismguard.integrations.chorusgraph.make_guard_handler()`
+---
+
+## FAQ
+
+**Does this call OpenAI?**  
+No — by default. The ONNX classifier and rules run locally. An optional LLM Judge can call OpenAI if you configure it; most traffic never escalates.
+
+**Can I self-host?**  
+Yes. PrismGuard is designed for on-prem and VPC deployment. Traffic stays on your infrastructure.
+
+**Can I use it without an LLM?**  
+Yes. `prismguard check` and the library API classify prompts independently — no model inference required on your side.
+
+**Can I add my own rules?**  
+Yes. Tier-1 rules, seed corpus imports, domain overlays, and tenant lexicons extend the firewall without forking core logic.
+
+---
+
+## Roadmap
+
+- [x] Law domain pack (verified)
+- [x] ONNX classifier (`prism-pi-v1`)
+- [x] HTTP API (`prismguard serve`)
+- [x] ChorusGraph integration
+- [ ] Healthcare validation
+- [ ] Finance validation
+- [ ] Multilingual evaluation
+- [ ] Additional benchmark suites
 
 ---
 
@@ -170,38 +203,32 @@ PrismGaurd/
 ├── benchmark/           # Law 4-stack harness (dev checkout only)
 ├── tests/               # 172+ pytest cases
 ├── scripts/             # Adversarial self-check, diagnostics
-└── handoffs/            # Landing page & GTM handoffs
+└── handoffs/            # Marketing & launch assets
 ```
 
 ---
 
 ## Benchmarks (law domain)
 
-Numbers below are from our **cold holdout** evaluation — prompts never used in training or seed import.  
+Cold holdout evaluation — prompts never used in training or seed import.  
 Source: [`benchmark/law/results/current/`](benchmark/law/results/current/) · Gate: `python scripts/adversarial_self_check.py`
-
-### vs [LLM Guard](https://github.com/protectai/llm-guard) (same traffic, paired frameworks)
 
 | Metric | PrismGuard | LLM Guard |
 |--------|:----------:|:---------:|
-| **Attack holdout block rate** (n=14) | **14/14 (100%)** | 9/14 (64.3%) |
-| **Normal holdout allow rate** (HTTP bench, n=25) | **25/25** | **25/25** |
-| **Expanded normal holdout** (in-process, n=43) | **43/43** | — |
-| **Mean latency** (CPL vs CGL) | **211 ms** | 353 ms |
+| Attack holdout block rate (n=14) | **14/14 (100%)** | 9/14 (64.3%) |
+| Normal holdout allow (HTTP, n=25) | **25/25** | **25/25** |
+| Expanded normal holdout (n=43) | **43/43** | — |
+| Mean latency (CPL vs CGL) | **211 ms** | 353 ms |
 
-PrismGuard detected **35.7 percentage points more real-world prompt-injection attacks** than LLM Guard on our legal holdout benchmark (same ChorusGraph / LangGraph stacks).
-
-Judge escalation on PrismGuard stacks: **~7%** of law benchmark traffic — most requests resolve on rules + ONNX alone.
+PrismGuard detected **35.7 percentage points more real-world prompt-injection attacks** than LLM Guard on our legal holdout benchmark.
 
 Full report: [`benchmark/law/results/current/COMPARISON_REPORT.md`](benchmark/law/results/current/COMPARISON_REPORT.md)
 
 ### What we do **not** claim
 
-- Healthcare / finance readiness (overlays exist; no valid benchmark yet)  
+- Healthcare / finance readiness yet  
 - Winning every attack category on every seeded dev set  
-- Holdout YAML as a customer runtime patch ([updates = pip + seed + model](docs/user-updates.md))  
-
-We lead with **audited, self-hosted guardrails** — not “beats every scanner everywhere.”
+- Holdout YAML as a customer runtime patch ([updates](docs/user-updates.md))
 
 ---
 
@@ -210,18 +237,9 @@ We lead with **audited, self-hosted guardrails** — not “beats every scanner 
 | Need | Command / doc |
 |------|----------------|
 | Verify install | `prismguard doctor` · `prismguard eval self-check` |
-| HTTP sidecar | `pip install "prismguard[serve,enterprise,guard-model]"` → [`integration-guide`](docs/integration-guide.md) |
-| Reproduce benchmarks | `pip install -e ".[benchmark-law,guard-model,llm-guard]"` then `python -m benchmark.law.run_local_benchmark` |
+| HTTP sidecar | `pip install "prismguard[serve,enterprise,guard-model]"` |
+| Reproduce benchmarks | `pip install -e ".[benchmark-law,guard-model,llm-guard]"` |
 | Enterprise tiers | [`docs/enterprise-product-model.md`](docs/enterprise-product-model.md) |
-
-### Optional install extras
-
-| Extra | Purpose |
-|-------|---------|
-| `guard-model` | ONNX runtime + `prism-pi-v1` |
-| `serve` | `prismguard-serve` (FastAPI) |
-| `enterprise` | Signed license verification |
-| `pgvector` / `chroma` / … | Persistent storage (Team license) |
 
 ---
 
@@ -231,11 +249,11 @@ We lead with **audited, self-hosted guardrails** — not “beats every scanner 
 |-----|-------|
 | [`docs/prismguard-design.md`](docs/prismguard-design.md) | Full architecture |
 | [`docs/integration-guide.md`](docs/integration-guide.md) | Library, HTTP, ChorusGraph |
-| [`docs/law-pilot-readiness.md`](docs/law-pilot-readiness.md) | Ship gates & claim discipline |
+| [`docs/law-pilot-readiness.md`](docs/law-pilot-readiness.md) | Ship gates |
 | [`docs/user-updates.md`](docs/user-updates.md) | How upgrades reach your install |
 
 ---
 
 ## License
 
-**Apache-2.0** open core. Team / Business features (pgvector persistence, HTTP API, tenant lexicon) require a signed offline license — see [`docs/enterprise-product-model.md`](docs/enterprise-product-model.md).
+**Apache-2.0** open core. Team / Business features require a signed offline license — [`docs/enterprise-product-model.md`](docs/enterprise-product-model.md).
