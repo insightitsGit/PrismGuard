@@ -289,6 +289,17 @@ Full report: [`benchmark/law/results/current/COMPARISON_REPORT.md`](benchmark/la
 
 ---
 
+## Community
+
+| Resource | Link |
+|----------|------|
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Code of Conduct | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
+| Security policy | [SECURITY.md](SECURITY.md) |
+| Support | [SUPPORT.md](SUPPORT.md) |
+| Issues | [GitHub Issues](https://github.com/insightitsGit/PrismGuard/issues) |
+| PyPI | [pypi.org/project/prismguard](https://pypi.org/project/prismguard/) |
+
 ## License
 
-**Apache-2.0** open core. Team / Business features require a signed offline license — [`docs/enterprise-product-model.md`](docs/enterprise-product-model.md).
+**Apache-2.0** open core — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Team / Business features require a signed offline license — [`docs/enterprise-product-model.md`](docs/enterprise-product-model.md).

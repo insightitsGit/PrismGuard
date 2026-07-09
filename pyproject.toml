@@ -8,7 +8,7 @@ version = "0.1.4"
 description = "Open-source prompt injection firewall for production LLM applications — explainable, self-hosted, ONNX-powered."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = { file = "LICENSE" }
 authors = [{ name = "Insight IT Solutions", email = "info@insightits.com" }]
 keywords = ["llm", "security", "prompt-injection", "firewall", "guardrails", "jailbreak", "compliance"]
 classifiers = [

@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/insightitsGit/PrismGuard/blob/main/SECURITY.md
+    about: Do not open a public issue — report privately per SECURITY.md
+  - name: Documentation
+    url: https://github.com/insightitsGit/PrismGuard/tree/main/docs
+    about: Integration guide, design docs, and enterprise product model
+  - name: PyPI package
+    url: https://pypi.org/project/prismguard/
+    about: Install and release history
