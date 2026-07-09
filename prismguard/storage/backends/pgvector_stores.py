@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from prismguard.storage.backends.pgvector_schema import qualified
+from prismguard.storage.blobs import BlobStore, raw_text_sha256
 from prismguard.storage.types import (
     CategoryRecord,
     ImportLogRecord,
@@ -142,23 +143,30 @@ class PgvectorRelationalStore:
 
 
 class PgvectorVectorStore:
-    def __init__(self, conn, *, schema_prefix: str) -> None:
+    def __init__(self, conn, *, schema_prefix: str, blob_store: BlobStore | None = None) -> None:
         self._conn = conn
         self._prefix = schema_prefix
         self._seeds = qualified(schema_prefix, "seed_entries")
+        self._blob_store = blob_store
 
     def upsert_seed_entry(self, entry: SeedEntryRecord) -> None:
         sem = vector_literal(entry.embedding_semantic)
         cat = vector_literal(entry.embedding_category)
+        raw_sha = entry.raw_text_sha256 or (
+            raw_text_sha256(entry.raw_text) if entry.raw_text else ""
+        )
+        if self._blob_store is not None and entry.raw_text:
+            raw_sha = self._blob_store.put_raw_text(entry.raw_text)
         with self._conn.cursor() as cur:
             cur.execute(
                 f"""
                 INSERT INTO {self._seeds} (
                     id, raw_text, chunk_text, embedding_semantic, embedding_category,
-                    category_slug, severity, source, reviewed_by, created_at, updated_at
+                    category_slug, severity, source, reviewed_by,
+                    content_hash, raw_text_sha256, created_at, updated_at
                 ) VALUES (
                     %s, %s, %s, %s::vector, %s::vector,
-                    %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     raw_text = EXCLUDED.raw_text,
@@ -169,6 +177,8 @@ class PgvectorVectorStore:
                     severity = EXCLUDED.severity,
                     source = EXCLUDED.source,
                     reviewed_by = EXCLUDED.reviewed_by,
+                    content_hash = EXCLUDED.content_hash,
+                    raw_text_sha256 = EXCLUDED.raw_text_sha256,
                     updated_at = EXCLUDED.updated_at
                 """,
                 (
@@ -181,6 +191,8 @@ class PgvectorVectorStore:
                     entry.severity,
                     entry.source,
                     entry.reviewed_by,
+                    entry.content_hash,
+                    raw_sha,
                     entry.created_at,
                     entry.updated_at,
                 ),
@@ -206,7 +218,8 @@ class PgvectorVectorStore:
             cur.execute(
                 f"""
                 SELECT id, raw_text, chunk_text, embedding_semantic, embedding_category,
-                       category_slug, severity, source, reviewed_by, created_at, updated_at
+                       category_slug, severity, source, reviewed_by, created_at, updated_at,
+                       content_hash, raw_text_sha256
                 FROM {self._seeds} WHERE id = %s
                 """,
                 (entry_id,),
@@ -221,7 +234,8 @@ class PgvectorVectorStore:
             cur.execute(
                 f"""
                 SELECT id, raw_text, chunk_text, embedding_semantic, embedding_category,
-                       category_slug, severity, source, reviewed_by, created_at, updated_at
+                       category_slug, severity, source, reviewed_by, created_at, updated_at,
+                       content_hash, raw_text_sha256
                 FROM {self._seeds} WHERE category_slug = %s ORDER BY created_at
                 """,
                 (category_slug,),
@@ -232,9 +246,16 @@ class PgvectorVectorStore:
     def _row_to_entry(self, row: tuple) -> SeedEntryRecord:
         sem = list(row[3]) if row[3] is not None else []
         cat = list(row[4]) if row[4] is not None else []
+        raw_text = row[1] or ""
+        raw_sha = row[12] if len(row) > 12 else ""
+        content_hash = row[11] if len(row) > 11 else ""
+        if not raw_text and raw_sha and self._blob_store is not None:
+            hydrated = self._blob_store.get_raw_text(raw_sha)
+            if hydrated:
+                raw_text = hydrated
         return SeedEntryRecord(
             id=row[0],
-            raw_text=row[1],
+            raw_text=raw_text,
             chunk_text=row[2],
             embedding_semantic=[float(x) for x in sem],
             embedding_category=[float(x) for x in cat],
@@ -242,6 +263,8 @@ class PgvectorVectorStore:
             severity=row[6],
             source=row[7],
             reviewed_by=row[8],
+            content_hash=content_hash or "",
+            raw_text_sha256=raw_sha or "",
             created_at=_parse_ts(row[9]),
             updated_at=_parse_ts(row[10]),
         )

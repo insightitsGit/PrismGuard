@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from prismguard.seed.models import ParsedSeed
 from prismguard.seed.normalize import normalize_seed_text, seed_content_hash
+from prismguard.storage.blobs import raw_text_sha256
 from prismguard.seed.validate import ValidationReport, validate_parsed_seed
 from prismguard.storage.protocols import StorageBackend
 from prismguard.storage.types import CategoryRecord, ImportLogRecord, RuleRecord, SeedEntryRecord
@@ -149,7 +150,7 @@ class SeedImporter:
                 source=entry.source,
                 reviewed_by=existing.reviewed_by if existing else None,
                 content_hash=content_hash,
-                raw_text_sha256=existing.raw_text_sha256 if existing else "",
+                raw_text_sha256=raw_text_sha256(canonical),
                 created_at=existing.created_at if existing else datetime.now(UTC),
                 updated_at=datetime.now(UTC),
             )

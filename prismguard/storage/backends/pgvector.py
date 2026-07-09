@@ -4,6 +4,7 @@ from typing import Any
 
 from prismguard.storage.backends.pgvector_schema import ensure_schema
 from prismguard.storage.backends.pgvector_stores import PgvectorRelationalStore, PgvectorVectorStore
+from prismguard.storage.blobs import PgBlobStore
 from prismguard.storage.protocols import RelationalStore, StorageBackend, VectorStore
 
 
@@ -32,7 +33,12 @@ class PgvectorBackend(StorageBackend):
         self._conn = psycopg2.connect(self._dsn)
         self._conn.autocommit = self._autocommit
         ensure_schema(self._conn, schema_prefix=self._schema_prefix)
-        self._vector = PgvectorVectorStore(self._conn, schema_prefix=self._schema_prefix)
+        blob_store = PgBlobStore(self._conn, schema_prefix=self._schema_prefix)
+        self._vector = PgvectorVectorStore(
+            self._conn,
+            schema_prefix=self._schema_prefix,
+            blob_store=blob_store,
+        )
         self._relational = PgvectorRelationalStore(self._conn, schema_prefix=self._schema_prefix)
         return self._conn
 
