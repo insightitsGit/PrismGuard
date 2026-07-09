@@ -57,12 +57,28 @@ jobs:
           .venv-base/bin/pip install dist/prismguard-*.whl
       - name: Base entry points must not crash
         run: |
-          set -e
+          set -euo pipefail
           .venv-base/bin/prismguard --help
-          .venv-base/bin/prismguard doctor
+
+          # doctor may exit 1 when guard-model extras / seed are absent — that is OK.
+          # Regression gate: must print a JSON report, not ModuleNotFoundError: numpy.
+          set +e
+          doctor_out=$(.venv-base/bin/prismguard doctor 2>&1)
+          doctor_code=$?
+          set -e
+          echo "$doctor_out"
+          echo "$doctor_out" | grep -q '"name": "guard_model"'
+          echo "$doctor_out" | grep -qi 'prismguard\[guard-model\]'
+          if echo "$doctor_out" | grep -qi "No module named 'numpy'"; then
+            echo "FAIL: base install still requires numpy at import time"
+            exit 1
+          fi
+          test "$doctor_code" -eq 0 -o "$doctor_code" -eq 1
+
           .venv-base/bin/prismguard-seed --help
           .venv-base/bin/prismguard-model --help
           .venv-base/bin/prismguard-profile --help
+
           # serve hard-requires [serve]; must fail with a clear message, not ModuleNotFoundError: numpy
           set +e
           out=$(.venv-base/bin/prismguard-serve 2>&1)
@@ -71,3 +87,7 @@ jobs:
           echo "$out"
           test "$code" -ne 0
           echo "$out" | grep -qi "prismguard\[serve\]"
+          if echo "$out" | grep -qi "No module named 'numpy'"; then
+            echo "FAIL: prismguard-serve crashed on numpy instead of asking for [serve]"
+            exit 1
+          fi
