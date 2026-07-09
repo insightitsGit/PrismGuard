@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,28 @@ def _softmax(logits: np.ndarray) -> np.ndarray:
     shifted = logits - np.max(logits, axis=-1, keepdims=True)
     exp = np.exp(shifted)
     return exp / np.sum(exp, axis=-1, keepdims=True)
+
+
+def _default_ort_intra_threads() -> int:
+    explicit = int(os.environ.get("PRISMGUARD_ORT_INTRA_THREADS", "0"))
+    if explicit > 0:
+        return explicit
+    return min(4, os.cpu_count() or 1)
+
+
+def _default_ort_inter_threads() -> int:
+    explicit = int(os.environ.get("PRISMGUARD_ORT_INTER_THREADS", "0"))
+    if explicit > 0:
+        return explicit
+    return 1
+
+
+def _dynamic_pad_length(token_len: int, *, max_length: int) -> int:
+    """Pad to next multiple of 8 (ORT-friendly) without always padding to max_length."""
+    if token_len <= 0:
+        return min(8, max_length)
+    padded = ((token_len + 7) // 8) * 8
+    return min(max(padded, 8), max_length)
 
 
 @dataclass
@@ -48,6 +71,7 @@ class ONNXPromptInjectionClassifier:
         self._uncertain_high = uncertain_high
         calibration = load_calibration(artifact_dir)
         self._temperature = calibration.temperature if calibration else card.calibration_temperature
+        self._warmed_up = False
 
     @property
     def model_id(self) -> str:
@@ -84,12 +108,8 @@ class ONNXPromptInjectionClassifier:
 
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        intra_threads = int(os.environ.get("PRISMGUARD_ORT_INTRA_THREADS", "0"))
-        if intra_threads > 0:
-            session_options.intra_op_num_threads = intra_threads
-        inter_threads = int(os.environ.get("PRISMGUARD_ORT_INTER_THREADS", "0"))
-        if inter_threads > 0:
-            session_options.inter_op_num_threads = inter_threads
+        session_options.intra_op_num_threads = _default_ort_intra_threads()
+        session_options.inter_op_num_threads = _default_ort_inter_threads()
 
         session = ort.InferenceSession(
             str(onnx_path),
@@ -97,7 +117,7 @@ class ONNXPromptInjectionClassifier:
             providers=["CPUExecutionProvider"],
         )
         tokenizer = Tokenizer.from_file(str(tokenizer_path))
-        return cls(
+        instance = cls(
             artifact_dir=artifact_dir,
             card=card,
             session=session,
@@ -105,16 +125,27 @@ class ONNXPromptInjectionClassifier:
             uncertain_low=uncertain_low,
             uncertain_high=uncertain_high,
         )
+        if os.environ.get("PRISMGUARD_ORT_WARMUP", "1").strip().lower() not in ("0", "false", "no"):
+            instance.warmup()
+        return instance
+
+    def warmup(self) -> None:
+        """Prime ORT session caches with a short dummy inference."""
+        if self._warmed_up or not self.is_ready:
+            return
+        self.predict("warmup")
+        self._warmed_up = True
 
     def _encode(self, text: str) -> tuple[np.ndarray, np.ndarray]:
         encoding = self._tokenizer.encode(text)
-        input_ids = encoding.ids[: self._card.max_length]
-        attention_mask = [1] * len(input_ids)
-        pad_len = self._card.max_length - len(input_ids)
-        if pad_len > 0:
-            input_ids = input_ids + [0] * pad_len
-            attention_mask = attention_mask + [0] * pad_len
-        ids = np.array([input_ids], dtype=np.int64)
+        token_ids = encoding.ids[: self._card.max_length]
+        pad_len = _dynamic_pad_length(len(token_ids), max_length=self._card.max_length)
+        attention_mask = [1] * len(token_ids)
+        if pad_len > len(token_ids):
+            pad_count = pad_len - len(token_ids)
+            token_ids = token_ids + [0] * pad_count
+            attention_mask = attention_mask + [0] * pad_count
+        ids = np.array([token_ids], dtype=np.int64)
         mask = np.array([attention_mask], dtype=np.int64)
         return ids, mask
 
@@ -144,5 +175,43 @@ class ONNXPromptInjectionClassifier:
                 "label_probabilities": probs.tolist(),
                 "artifact_dir": str(self._artifact_dir),
                 "calibration_temperature": self._temperature,
+                "sequence_length": int(input_ids.shape[1]),
             },
         )
+
+
+@lru_cache(maxsize=4)
+def _cached_classifier_key(
+    artifact_dir: str,
+    uncertain_low: float,
+    uncertain_high: float,
+) -> str:
+    return f"{artifact_dir}\0{uncertain_low}\0{uncertain_high}"
+
+
+_classifier_singletons: dict[str, ONNXPromptInjectionClassifier] = {}
+
+
+def get_or_load_classifier(
+    artifact_dir: Path,
+    *,
+    card: ModelCard,
+    uncertain_low: float,
+    uncertain_high: float,
+) -> ONNXPromptInjectionClassifier:
+    """Reuse a warmed ONNX session per artifact path (process lifetime)."""
+    key = _cached_classifier_key(str(artifact_dir.resolve()), uncertain_low, uncertain_high)
+    if key not in _classifier_singletons:
+        _classifier_singletons[key] = ONNXPromptInjectionClassifier.from_artifact_dir(
+            artifact_dir,
+            card=card,
+            uncertain_low=uncertain_low,
+            uncertain_high=uncertain_high,
+        )
+    return _classifier_singletons[key]
+
+
+def clear_classifier_cache() -> None:
+    """Clear singleton cache (tests)."""
+    _classifier_singletons.clear()
+    _cached_classifier_key.cache_clear()

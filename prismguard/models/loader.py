@@ -7,7 +7,7 @@ from pathlib import Path
 
 from prismguard.config.loader import GuardModelConfig
 from prismguard.models.model_card import load_model_card
-from prismguard.models.onnx_classifier import ONNXPromptInjectionClassifier
+from prismguard.models.onnx_classifier import get_or_load_classifier
 
 
 def default_artifacts_root() -> Path:
@@ -41,10 +41,10 @@ def load_corpus_manifest(artifact_dir: Path) -> dict | None:
     return raw if isinstance(raw, dict) else None
 
 
-def load_onnx_classifier(config: GuardModelConfig) -> ONNXPromptInjectionClassifier:
+def load_onnx_classifier(config: GuardModelConfig):
     artifact_dir = resolve_artifact_dir(config)
     card = load_model_card(artifact_dir)
-    return ONNXPromptInjectionClassifier.from_artifact_dir(
+    return get_or_load_classifier(
         artifact_dir,
         card=card,
         uncertain_low=config.uncertain_low,
