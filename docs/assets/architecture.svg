@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" role="img" aria-label="PrismGuard request pipeline">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#38bdf8"/>
+      <stop offset="100%" style="stop-color:#818cf8"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect width="720" height="520" rx="16" fill="url(#bg)"/>
+  <text x="360" y="42" text-anchor="middle" fill="#f8fafc" font-family="Segoe UI, system-ui, sans-serif" font-size="22" font-weight="700">PrismGuard pipeline</text>
+  <text x="360" y="64" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI, system-ui, sans-serif" font-size="13">Every step can emit an auditable resolution gate</text>
+
+  <g font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="600">
+    <rect x="270" y="88" width="180" height="44" rx="10" fill="#334155" stroke="#64748b" filter="url(#shadow)"/>
+    <text x="360" y="116" text-anchor="middle" fill="#f1f5f9">User / Agent prompt</text>
+
+    <line x1="360" y1="132" x2="360" y2="152" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="250" y="152" width="220" height="48" rx="10" fill="#1d4ed8" stroke="url(#accent)" stroke-width="2" filter="url(#shadow)"/>
+    <text x="360" y="182" text-anchor="middle" fill="#ffffff">PrismGuard</text>
+
+    <line x1="360" y1="200" x2="360" y2="220" stroke="#64748b" stroke-width="2"/>
+
+    <rect x="230" y="220" width="260" height="40" rx="8" fill="#0f766e" stroke="#14b8a6"/>
+    <text x="360" y="245" text-anchor="middle" fill="#ecfeff">Tier-1 rules</text>
+
+    <line x1="360" y1="260" x2="360" y2="276" stroke="#64748b" stroke-width="2"/>
+
+    <rect x="210" y="276" width="300" height="40" rx="8" fill="#0f766e" stroke="#14b8a6"/>
+    <text x="360" y="301" text-anchor="middle" fill="#ecfeff">Structural analysis</text>
+
+    <line x1="360" y1="316" x2="360" y2="332" stroke="#64748b" stroke-width="2"/>
+
+    <rect x="220" y="332" width="280" height="40" rx="8" fill="#7c3aed" stroke="#a78bfa"/>
+    <text x="360" y="357" text-anchor="middle" fill="#f5f3ff">ONNX guard model (prism-pi-v1)</text>
+
+    <line x1="360" y1="372" x2="360" y2="388" stroke="#64748b" stroke-width="2" stroke-dasharray="6 4"/>
+    <text x="390" y="384" fill="#94a3b8" font-size="11" font-weight="500">optional</text>
+
+    <rect x="235" y="388" width="250" height="40" rx="8" fill="#b45309" stroke="#fbbf24"/>
+    <text x="360" y="413" text-anchor="middle" fill="#fffbeb">LLM Judge (rare escalation)</text>
+
+    <line x1="360" y1="428" x2="360" y2="448" stroke="#64748b" stroke-width="2"/>
+
+    <rect x="270" y="448" width="180" height="44" rx="10" fill="#166534" stroke="#4ade80" filter="url(#shadow)"/>
+    <text x="360" y="476" text-anchor="middle" fill="#ecfdf5">ALLOW  ’  Your LLM</text>
+  </g>
+
+  <g transform="translate(560, 220)">
+    <rect x="0" y="0" width="130" height="88" rx="8" fill="#1e293b" stroke="#475569"/>
+    <text x="65" y="24" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600">Audit output</text>
+    <text x="12" y="44" fill="#e2e8f0" font-family="Consolas, monospace" font-size="10">decision</text>
+    <text x="12" y="58" fill="#e2e8f0" font-family="Consolas, monospace" font-size="10">resolution_gate</text>
+    <text x="12" y="72" fill="#e2e8f0" font-family="Consolas, monospace" font-size="10">decision_source</text>
+  </g>
+</svg>

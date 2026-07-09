@@ -240,6 +240,27 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if coherence_ok else 1
 
 
+def cmd_check(args: argparse.Namespace) -> int:
+    from prismguard.cli_check import format_check_result, run_check
+
+    result = run_check(args.text)
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "decision": result.decision,
+                    "resolution_gate": result.resolution_gate,
+                    "matched_category": result.matched_category,
+                    "details": result.details,
+                },
+                indent=2,
+            )
+        )
+    else:
+        print(format_check_result(result))
+    return 0 if result.decision == "allow" else 1
+
+
 def cmd_context_import(args: argparse.Namespace) -> int:
     if args.apply:
         from prismguard.licensing.features import ENTERPRISE_TENANT, require_feature
@@ -306,6 +327,10 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor_cmd.add_argument("--config", type=Path, default=None)
     doctor_cmd.add_argument("--backend", default=None)
 
+    check_cmd = sub.add_parser("check", help="Check one prompt and print an auditable decision")
+    check_cmd.add_argument("text", help="Prompt text to classify")
+    check_cmd.add_argument("--json", action="store_true", help="Emit JSON instead of human-readable output")
+
     ctx_cmd = sub.add_parser("context", help="Tenant context lexicon tools")
     ctx_sub = ctx_cmd.add_subparsers(dest="context_command", required=True)
     import_cmd = ctx_sub.add_parser("import", help="Validate or import optional tenant lexicon")
@@ -340,6 +365,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(cmd_init(args))
     if args.command == "doctor":
         raise SystemExit(cmd_doctor(args))
+    if args.command == "check":
+        raise SystemExit(cmd_check(args))
     if args.command == "context":
         if args.context_command == "import":
             raise SystemExit(cmd_context_import(args))
