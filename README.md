@@ -17,7 +17,7 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 
 ✅ Self-hosted &nbsp;·&nbsp; ✅ Explainable decisions &nbsp;·&nbsp; ✅ ONNX local inference &nbsp;·&nbsp; ✅ Optional LLM Judge &nbsp;·&nbsp; ✅ Built for production
 
-[Quick install](#install) · [PyPI](https://pypi.org/project/prismguard/0.1.6/) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
+[Quick install](#install) · [Live demo](docs/demo.html) · [PyPI](https://pypi.org/project/prismguard/0.1.6/) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
 
 ### Designed for
 
@@ -25,7 +25,13 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 
 ---
 
-## What is PrismGuard?
+## Live demo
+
+**[▶ Interactive terminal demo](docs/demo.html)** — 5-step walkthrough with real `prismguard check` output (ALLOW + BLOCK + `resolution_gate`).
+
+Hosted on GitHub Pages after enable: `https://insightitsGit.github.io/PrismGuard/demo.html` — see [`docs/GITHUB_PAGES_DEMO.md`](docs/GITHUB_PAGES_DEMO.md).
+
+---
 
 PrismGuard sits **in front of your LLM** and classifies each user prompt before harm reaches your agent or RAG pipeline.
 
@@ -188,7 +194,7 @@ User → PrismGuard → Rules / ONNX / (optional) Judge → ALLOW → Your LLM
                                                    └→ BLOCK → audit log
 ```
 
-Details: [`docs/prismguard-design.md`](docs/prismguard-design.md) · [`docs/integration-guide.md`](docs/integration-guide.md)
+Details: [`docs/prismguard-design.md`](docs/prismguard-design.md) · [`docs/integration-guide.md`](docs/integration-guide.md) · [`docs/marketing/README.md`](docs/marketing/README.md)
 
 ---
 
@@ -254,7 +260,7 @@ Yes. Tier-1 rules, seed corpus imports, domain overlays, and tenant lexicons ext
 ```
 PrismGuard/
 ├── prismguard/          # Library, CLI, ONNX metadata, domain packs
-├── docs/                # Architecture, integration, enterprise model
+├── docs/                # Architecture, integration, enterprise model, marketing
 ├── benchmark/           # Law 4-stack harness (dev checkout only)
 ├── tests/               # 178+ pytest cases
 ├── scripts/             # Adversarial self-check, diagnostics
@@ -304,6 +310,7 @@ Full report: [`benchmark/law/results/current/COMPARISON_REPORT.md`](benchmark/la
 | Doc | Topic |
 |-----|-------|
 | [`docs/prismguard-design.md`](docs/prismguard-design.md) | Full architecture |
+| [`docs/marketing/README.md`](docs/marketing/README.md) | GTM, launch copy, NotebookLM story, flyer |
 | [`docs/integration-guide.md`](docs/integration-guide.md) | Library, HTTP, ChorusGraph |
 | [`docs/law-pilot-readiness.md`](docs/law-pilot-readiness.md) | Ship gates |
 | [`docs/user-updates.md`](docs/user-updates.md) | How upgrades and model artifacts reach your install |
