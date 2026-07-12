@@ -17,7 +17,7 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 
 ✅ Self-hosted &nbsp;·&nbsp; ✅ Explainable decisions &nbsp;·&nbsp; ✅ ONNX local inference &nbsp;·&nbsp; ✅ Optional LLM Judge &nbsp;·&nbsp; ✅ Built for production
 
-[Quick install](#install) · [Live demo](docs/demo.html) · [PyPI](https://pypi.org/project/prismguard/0.1.6/) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
+[Quick install](#install) · [Live demo](docs/demo.html) · [PyPI](https://pypi.org/project/prismguard/0.1.7/) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
 
 ### Designed for
 
@@ -246,7 +246,7 @@ Yes. Tier-1 rules, seed corpus imports, domain overlays, and tenant lexicons ext
 
 - [x] Law domain pack (verified)
 - [x] ONNX classifier (`prism-pi-v1`)
-- [x] PyPI release ([0.1.6](https://pypi.org/project/prismguard/0.1.6/))
+- [x] PyPI release ([0.1.7](https://pypi.org/project/prismguard/0.1.7/))
 - [x] HTTP API (`prismguard serve`)
 - [x] ChorusGraph integration
 - [ ] Healthcare validation
