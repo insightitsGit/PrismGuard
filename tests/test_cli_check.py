@@ -30,3 +30,20 @@ def test_format_check_result_block_shape() -> None:
     )
     assert text.startswith("BLOCKED")
     assert "confidence=0.91" in text
+    assert "decision_source=classifier_first->block" in text
+    assert "→" not in text
+
+
+def test_format_check_result_ascii_safe_arrow() -> None:
+    from prismguard.cli_check import format_check_result
+    from prismguard.runtime.check import CheckResult
+
+    text = format_check_result(
+        CheckResult(
+            decision="allow",
+            resolution_gate="fusion_allow",
+            details={"decision_source": "classifier_only→no_model"},
+        )
+    )
+    assert "decision_source=classifier_only->no_model" in text
+    assert "→" not in text

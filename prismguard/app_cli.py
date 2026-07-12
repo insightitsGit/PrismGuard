@@ -253,7 +253,18 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 def cmd_check(args: argparse.Namespace) -> int:
     from prismguard.cli_check import format_check_result, run_check
 
-    result = run_check(args.text)
+    try:
+        result = run_check(args.text)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        # Last-resort: actionable message, not an unhandled traceback.
+        print(f"prismguard check failed: {exc}", file=sys.stderr)
+        print(
+            'Hint: for full taxonomy extras run: pip install "prismguard[prism]"',
+            file=sys.stderr,
+        )
+        return 2
     if args.json:
         print(
             json.dumps(

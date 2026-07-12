@@ -69,7 +69,7 @@ We complement the ecosystem — PrismGuard is the **firewall layer** when you ne
 ### Quick install (recommended)
 
 ```bash
-pip install "prismguard[prism,guard-model]==0.1.6"
+pip install "prismguard[prism,guard-model]==0.1.7"
 # Optional: ONNX weights (~705 MB). prism-pi-v1 is law-bench-oriented —
 # keep PRISMGUARD_USE_ONNX unset for general/hub chat until hub FAQ gate is green.
 prismguard-model download
@@ -79,7 +79,7 @@ prismguard-model download
 # export PRISMGUARD_USE_ONNX=1
 ```
 
-From [PyPI](https://pypi.org/project/prismguard/0.1.6/) · [release notes](https://pypi.org/project/prismguard/0.1.6/)
+From [PyPI](https://pypi.org/project/prismguard/0.1.7/) · [release notes](https://pypi.org/project/prismguard/0.1.7/)
 
 Hub / product chat (recommended):
 
@@ -94,10 +94,11 @@ You're ready. Run `prismguard check "your prompt here"`.
 ### Minimal install
 
 ```bash
-pip install prismguard==0.1.6
+pip install prismguard==0.1.7
+prismguard check "hello there"   # works rules-only — no [prism] required
 ```
 
-Rules-only path — add `[prism,guard-model]` and run `prismguard-model download` for the ONNX classifier (opt-in via `PRISMGUARD_USE_ONNX=1`).
+Rules-only path (Tier-1 / structural). Add `[prism,guard-model]` and run `prismguard-model download` for full taxonomy + ONNX classifier (opt-in via `PRISMGUARD_USE_ONNX=1`).
 
 ### ONNX model (one-time download)
 

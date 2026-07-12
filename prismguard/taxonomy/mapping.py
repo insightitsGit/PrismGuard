@@ -30,6 +30,47 @@ except ImportError:  # pragma: no cover
 
 log = logging.getLogger(__name__)
 
+_PRISM_EXTRA_HINT = "prismrag-patch is required for full taxonomy — pip install prismguard[prism]"
+
+
+def has_prismrag() -> bool:
+    """True when the optional ``[prism]`` stack (prismrag-patch) is importable."""
+    return _HAS_PRISMRAG
+
+
+class _KeywordRulesStrategy:
+    """Base-install category inference from keyword rules (no prismrag-patch)."""
+
+    def __init__(self, mapping_dict: dict[str, Any]) -> None:
+        self._word_to_slug: list[tuple[str, str]] = []
+        for rule in mapping_dict.get("rules", []):
+            word = str(rule.get("word", "")).lower().strip()
+            slug = str(rule.get("category_slug", "")).strip()
+            if word and slug:
+                self._word_to_slug.append((word, slug))
+
+    def infer_category_from_text(self, text: str) -> str | None:
+        lower = text.lower()
+        scores: dict[str, int] = {}
+        for word, slug in self._word_to_slug:
+            if len(word) < 4:
+                continue
+            if re.search(rf"\b{re.escape(word)}\b", lower):
+                scores[slug] = scores.get(slug, 0) + 1
+        if not scores:
+            return None
+        return max(scores, key=lambda s: scores[s])
+
+
+class _RulesOnlyPatch:
+    """Pools semantic vectors to category dim without prismrag remap."""
+
+    def remap_vector(self, semantic_vector: list[float], text: str = "") -> list[float]:
+        _ = text
+        from prismguard.taxonomy.embedder import _pool_dims
+
+        return _pool_dims(list(semantic_vector), CATEGORY_VECTOR_DIM)
+
 
 @dataclass
 class TaxonomyEngine:
@@ -43,6 +84,7 @@ class TaxonomyEngine:
     attack_categories: set[str] = field(default_factory=set)
     benign_category: str = "benign_adjacent"
     _substring_rules: list[tuple[str, str]] = field(default_factory=list)
+    rules_only: bool = False
 
     def _substring_match_scores(self, text: str) -> dict[str, int]:
         lower = text.lower()
@@ -173,11 +215,38 @@ def _mapping_dict_from_seed(parsed: ParsedSeed) -> dict[str, Any]:
     }
 
 
+def _engine_from_parts(
+    *,
+    mapping_dict: dict[str, Any],
+    regex_rules: list[RuleRecord],
+    bridges: dict[str, list[str]],
+    attack_categories: set[str],
+    substring_rules: list[tuple[str, str]],
+) -> TaxonomyEngine:
+    """Build a TaxonomyEngine; degrade to rules-only when prismrag-patch is absent."""
+    if _HAS_PRISMRAG:
+        patch = PrismRAGPatch(mapping=mapping_dict, blend_alpha=0.35)
+        strategy = RulesStrategy(MappingConfig.from_dict(mapping_dict))
+        rules_only = False
+    else:
+        log.info("prismrag-patch not installed — using rules-only taxonomy (%s)", _PRISM_EXTRA_HINT)
+        patch = _RulesOnlyPatch()
+        strategy = _KeywordRulesStrategy(mapping_dict)
+        rules_only = True
+    return TaxonomyEngine(
+        patch=patch,
+        strategy=strategy,
+        mapping_dict=mapping_dict,
+        regex_rules=regex_rules,
+        bridges=bridges,
+        attack_categories=attack_categories,
+        _substring_rules=substring_rules,
+        rules_only=rules_only,
+    )
+
+
 def build_mapping_after_import(storage: StorageBackend, parsed: ParsedSeed) -> TaxonomyEngine:
     """Build taxonomy from persisted storage (authoritative) with bridges from parsed seed."""
-    if not _HAS_PRISMRAG:
-        raise ImportError("prismrag-patch is required for taxonomy — pip install prismguard[prism]")
-
     categories = storage.relational.list_categories()
     rules = storage.relational.list_rules()
     parsed_bridges = {c.slug: list(c.bridges_to) for c in parsed.categories}
@@ -190,32 +259,20 @@ def build_mapping_after_import(storage: StorageBackend, parsed: ParsedSeed) -> T
             for word, slug in keyword_pairs
         ],
     }
-    patch = PrismRAGPatch(mapping=mapping_dict, blend_alpha=0.35)
-    strategy = RulesStrategy(MappingConfig.from_dict(mapping_dict))
-
     bridges = {c.slug: parsed_bridges.get(c.slug, []) for c in categories}
     attack = {c.slug for c in categories if c.is_attack_category}
     substring_rules = [(word, slug) for word, slug in keyword_pairs if len(word) >= 5]
-
-    return TaxonomyEngine(
-        patch=patch,
-        strategy=strategy,
+    return _engine_from_parts(
         mapping_dict=mapping_dict,
         regex_rules=rules,
         bridges=bridges,
         attack_categories=attack,
-        _substring_rules=substring_rules,
+        substring_rules=substring_rules,
     )
 
 
 def build_mapping_from_parsed_seed(parsed: ParsedSeed) -> TaxonomyEngine:
-    if not _HAS_PRISMRAG:
-        raise ImportError("prismrag-patch is required for taxonomy — pip install prismguard[prism]")
-
     mapping_dict = _mapping_dict_from_seed(parsed)
-    patch = PrismRAGPatch(mapping=mapping_dict, blend_alpha=0.35)
-    strategy = RulesStrategy(MappingConfig.from_dict(mapping_dict))
-
     bridges: dict[str, list[str]] = {}
     attack: set[str] = set()
     for category in parsed.categories:
@@ -224,33 +281,28 @@ def build_mapping_from_parsed_seed(parsed: ParsedSeed) -> TaxonomyEngine:
             attack.add(category.slug)
 
     substring_rules = [(word, slug) for word, slug in _keyword_rules_from_seed(parsed) if len(word) >= 5]
-
-    return TaxonomyEngine(
-        patch=patch,
-        strategy=strategy,
+    regex_rules = [
+        RuleRecord(
+            rule_id=r.rule_id,
+            pattern=r.pattern,
+            pattern_type=r.pattern_type,
+            category_slug=r.category_slug,
+            severity=r.severity,
+            rationale=r.rationale,
+            created_by=r.created_by,
+        )
+        for r in parsed.rules
+    ]
+    return _engine_from_parts(
         mapping_dict=mapping_dict,
-        regex_rules=[
-            RuleRecord(
-                rule_id=r.rule_id,
-                pattern=r.pattern,
-                pattern_type=r.pattern_type,
-                category_slug=r.category_slug,
-                severity=r.severity,
-                rationale=r.rationale,
-                created_by=r.created_by,
-            )
-            for r in parsed.rules
-        ],
+        regex_rules=regex_rules,
         bridges=bridges,
         attack_categories=attack,
-        _substring_rules=substring_rules,
+        substring_rules=substring_rules,
     )
 
 
 def build_mapping_from_storage(storage: StorageBackend) -> TaxonomyEngine:
-    if not _HAS_PRISMRAG:
-        raise ImportError("prismrag-patch is required for taxonomy — pip install prismguard[prism]")
-
     categories = storage.relational.list_categories()
     rules = storage.relational.list_rules()
     mapping_dict: dict[str, Any] = {
@@ -261,15 +313,11 @@ def build_mapping_from_storage(storage: StorageBackend) -> TaxonomyEngine:
             if r.pattern_type == "keyword"
         ],
     }
-    patch = PrismRAGPatch(mapping=mapping_dict, blend_alpha=0.35)
-    strategy = RulesStrategy(MappingConfig.from_dict(mapping_dict))
     attack = {c.slug for c in categories if c.is_attack_category}
-    return TaxonomyEngine(
-        patch=patch,
-        strategy=strategy,
+    return _engine_from_parts(
         mapping_dict=mapping_dict,
         regex_rules=rules,
         bridges={},
         attack_categories=attack,
-        _substring_rules=[(r.pattern, r.category_slug) for r in rules if r.pattern_type == "keyword"],
+        substring_rules=[(r.pattern, r.category_slug) for r in rules if r.pattern_type == "keyword"],
     )

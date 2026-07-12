@@ -81,6 +81,24 @@ jobs:
           .venv-base/bin/prismguard-model --help
           .venv-base/bin/prismguard-profile --help
 
+          # Headline command must work on bare install (rules-only, no [prism]).
+          set +e
+          check_out=$(.venv-base/bin/prismguard check "hello there" 2>&1)
+          check_code=$?
+          set -e
+          echo "$check_out"
+          if echo "$check_out" | grep -qi "Traceback"; then
+            echo "FAIL: prismguard check dumped a traceback on base install"
+            exit 1
+          fi
+          if echo "$check_out" | grep -qi "prismrag-patch is required"; then
+            echo "FAIL: prismguard check still hard-requires prismrag on base install"
+            exit 1
+          fi
+          echo "$check_out" | grep -Eqi "ALLOW|BLOCKED"
+          # allow=0, block=1 are both success for the CLI contract; 2+ is hard failure
+          test "$check_code" -eq 0 -o "$check_code" -eq 1
+
           # serve hard-requires [serve]; must fail with a clear message, not ModuleNotFoundError: numpy
           set +e
           out=$(.venv-base/bin/prismguard-serve 2>&1)

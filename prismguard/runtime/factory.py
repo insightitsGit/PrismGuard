@@ -108,8 +108,15 @@ def create_checker_from_env() -> Any:
 
     Breaking change (Dogfood1): ONNX loads only when ``PRISMGUARD_USE_ONNX=1``.
     Domain defaults to empty/core (no law overlay) unless ``PRISMGUARD_DOMAIN`` is set.
+
+    Default (no ``PRISMGUARD_APP_PROFILE``): dogfood ``web_chat`` / rules-first path so
+    ``prismguard check`` works on a bare ``pip install prismguard`` without ``[prism]``.
+    Set ``PRISMGUARD_APP_PROFILE=sidecar`` or ``law_pilot`` for the full stack.
     """
     profile = os.environ.get("PRISMGUARD_APP_PROFILE", "").strip().lower()
+    if not profile:
+        # Base install / CLI headline path — rules-first, no surprise prismrag hard-fail.
+        profile = "web_chat"
     if profile in ("web_chat", "rules_only", "law_pilot", "sidecar"):
         return get_or_create_checker(profile)  # type: ignore[arg-type]
     return _build_full_checker(
@@ -161,10 +168,14 @@ def _build_full_checker(
     from prismguard.storage import create_storage_from_env
     from prismguard.taxonomy.embedder import HashEmbedder, create_embedder_from_config
 
+    from prismguard.taxonomy.mapping import has_prismrag
+
     profile = seed_profile or os.environ.get("PRISMGUARD_SEED_PROFILE", "authored")
     storage = create_storage_from_env()
     parsed = load_bundled_seed(profile=profile)  # type: ignore[arg-type]
-    skip_tax = force_hash_embedder or offline_mode()
+    # Skip heavy post-seed pipeline when offline/hash-only, or when [prism] is absent
+    # (rules-only TaxonomyEngine is still built later in RuntimeChecker.from_storage).
+    skip_tax = force_hash_embedder or offline_mode() or not has_prismrag()
     import_bundled_seed(storage, profile=profile, skip_taxonomy=skip_tax)  # type: ignore[arg-type]
     if domain:
         from prismguard.domains.registry import get_domain_pack
