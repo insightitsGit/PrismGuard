@@ -1,5 +1,7 @@
 # PrismGuard — Marketing & launch docs
 
+**📌 PINNED — where to post next:** [PINNED_DISTRIBUTION.md](PINNED_DISTRIBUTION.md)
+
 Copy of GTM and launch materials from the Insight IT Marketing KB (`C:\code\Marketing`).  
 **Synced:** 2026-07-09 · **Product version:** v0.1.6
 
