@@ -17,7 +17,7 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 
 ✅ Self-hosted &nbsp;·&nbsp; ✅ Explainable decisions &nbsp;·&nbsp; ✅ ONNX local inference &nbsp;·&nbsp; ✅ Optional LLM Judge &nbsp;·&nbsp; ✅ Built for production
 
-[Quick install](#install) · [Live demo](docs/demo.html) · [PyPI](https://pypi.org/project/prismguard/0.1.7/) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
+[Quick install](#install) · [Live demo](docs/demo.html) · [**Guardrail Scorecard**](docs/scorecard.md) · [PyPI](https://pypi.org/project/prismguard/0.1.7/) · [Example](#quick-example) · [Docs](docs/prismguard-design.md) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
 
 ### Designed for
 
@@ -30,6 +30,12 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 **[▶ Interactive terminal demo](docs/demo.html)** — 5-step walkthrough with real `prismguard check` output (ALLOW + BLOCK + `resolution_gate`).
 
 Hosted on GitHub Pages after enable: `https://insightitsGit.github.io/PrismGuard/demo.html` — see [`docs/GITHUB_PAGES_DEMO.md`](docs/GITHUB_PAGES_DEMO.md).
+
+## Guardrail Scorecard / Gate Grade
+
+**Self-serve cold path** (no Calendly): run the holdout / `prismguard check`, see named `resolution_gate`, then reply **GRADE** for a free one-page gate-gap report.
+
+→ Full instructions: **[docs/scorecard.md](docs/scorecard.md)**
 
 ---
 
