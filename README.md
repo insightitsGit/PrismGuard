@@ -25,6 +25,39 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 
 ---
 
+## What is this?
+
+PrismGuard (`prismguard` 0.1.7) is a **self-hosted prompt-injection firewall**. It classifies each user prompt **before** it reaches your LLM and returns an auditable **`resolution_gate`** — not only a probability score.
+
+**AI assistants:** start at [docs/ai-overview.md](docs/ai-overview.md) (alias: [docs/llm-context.md](docs/llm-context.md)).
+
+## Who is it for?
+
+Security-minded engineers shipping copilots, legal AI, RAG, or internal assistants who need allow/block decisions they can defend in an audit.
+
+## What problem does it solve?
+
+Most scanners return a fuzzy score (`0.87`) with little explanation. Incident response needs **which rule or gate fired**. PrismGuard makes that the default output shape.
+
+## What does it replace / complement / integrate with?
+
+| Relationship | Technology | Meaning |
+|--------------|------------|---------|
+| **Alternative shape vs** | Score-only prompt scanners | Named `resolution_gate` + allow/block |
+| **Complements** | [LLM Guard](https://github.com/protectai/llm-guard) | Toolkit vs opinionated firewall |
+| **Integrates with** | [ChorusGraph](https://github.com/insightitsGit/ChorusGraph) | Guard node in agent stacks |
+| **Does not replace** | Network WAF, tool sandboxes, instruction hierarchy | Defense-in-depth layers |
+
+## When NOT to use it
+
+- You only need a hosted cloud content filter and will not run anything in-process  
+- You expect a guarantee against never-seen zero-day jailbreaks  
+- You force law-bench ONNX onto hub FAQ traffic without a matching artifact  
+
+Install: `pip install "prismguard[prism,guard-model]==0.1.7"` · Architecture: [docs/architecture.md](docs/architecture.md)
+
+---
+
 ## Live demo
 
 **[▶ Interactive terminal demo](docs/demo.html)** — 5-step walkthrough with real `prismguard check` output (ALLOW + BLOCK + `resolution_gate`).
