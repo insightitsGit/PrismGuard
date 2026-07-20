@@ -17,7 +17,7 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 
 ✅ Self-hosted &nbsp;·&nbsp; ✅ Explainable decisions &nbsp;·&nbsp; ✅ ONNX local inference &nbsp;·&nbsp; ✅ Optional LLM Judge &nbsp;·&nbsp; ✅ Built for production
 
-[Pick features](#pick-your-features) · [Examples](examples/README.md) · [Best practices](docs/best-practices.md) · [Quick install](#install) · [Live demo](docs/demo.html) · [**Guardrail Scorecard**](docs/scorecard.md) · [Learn loop](#learn-from-seed--words--db) · [PyPI](https://pypi.org/project/prismguard/0.1.8/) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
+[Pick features](#pick-your-features) · [Examples](examples/README.md) · [Best practices](docs/best-practices.md) · [Quick install](#install) · [Live demo](docs/demo.html) · [**Guardrail Scorecard**](docs/scorecard.md) · [Learn loop](#learn-from-seed--words--db) · [PyPI](https://pypi.org/project/prismguard/0.1.9/) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
 
 ### Designed for
 
@@ -27,7 +27,7 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 
 ## What is this?
 
-PrismGuard (`prismguard` 0.1.8) is a **self-hosted prompt-injection firewall**. It classifies each user prompt **before** it reaches your LLM and returns an auditable **`resolution_gate`** — not only a probability score.
+PrismGuard (`prismguard` 0.1.9) is a **self-hosted prompt-injection firewall**. It classifies each user prompt **before** it reaches your LLM and returns an auditable **`resolution_gate`** — not only a probability score.
 
 Features are **opt-in layers**. A hub install is not a scorecard install; light ONNX is not heavy ONNX; neither enables learn-from-seed taxonomy. **Pick each layer you need** (table below), then verify with `prismguard caps`.
 
@@ -126,7 +126,7 @@ Most scanners return a fuzzy score (`0.87`) with little explanation. Incident re
 - You expect a guarantee against never-seen zero-day jailbreaks  
 - You force law-bench ONNX onto hub FAQ traffic without a matching artifact  
 
-Install: `pip install "prismguard[prism,guard-model]==0.1.8"` · Architecture: [docs/architecture.md](docs/architecture.md)
+Install: `pip install "prismguard[prism,guard-model]==0.1.9"` · Architecture: [docs/architecture.md](docs/architecture.md)
 
 ---
 
@@ -183,12 +183,12 @@ We complement the ecosystem — PrismGuard is the **firewall layer** when you ne
 
 ## Install
 
-Pick a recipe that matches the [feature table](#pick-your-features). From [PyPI](https://pypi.org/project/prismguard/0.1.8/).
+Pick a recipe that matches the [feature table](#pick-your-features). From [PyPI](https://pypi.org/project/prismguard/0.1.9/).
 
 ### A — Hub / FAQ only (feature #1)
 
 ```bash
-pip install prismguard==0.1.8
+pip install prismguard==0.1.9
 ```
 
 ```python
@@ -199,7 +199,7 @@ checker = create_checker_for_app("web_chat")  # rules-first; no surprise ONNX
 ### B — Light or heavy ONNX (features #2 / #3)
 
 ```bash
-pip install "prismguard[guard-model]==0.1.8"
+pip install "prismguard[guard-model]==0.1.9"
 prismguard-model download   # ~705 MB; required — light/heavy raise if missing
 ```
 
@@ -213,7 +213,7 @@ checker = create_checker_for_app("light")   # #2 production latency (hybrid)
 ### C — Full learn-from-seed (features #5 + #6, optional #8 / #9)
 
 ```bash
-pip install "prismguard[guard-model,prism]==0.1.8"
+pip install "prismguard[guard-model,prism]==0.1.9"
 prismguard-model download
 export PRISMGUARD_USE_ONNX=1
 export PRISMGUARD_FEEDBACK_PERSIST=1
@@ -232,7 +232,7 @@ checker = create_checker_for_app("law_pilot", use_onnx=True)  # taxonomy path �
 ### D — Kitchen-sink local (taxonomy + ONNX + tools)
 
 ```bash
-pip install "prismguard[prism,guard-model]==0.1.8"
+pip install "prismguard[prism,guard-model]==0.1.9"
 prismguard-model download
 prismguard doctor
 prismguard caps --profile law_pilot
@@ -394,7 +394,7 @@ Yes. Tier-1 rules, seed corpus imports, domain overlays, and tenant lexicons (#8
 
 - [x] Law domain pack (verified)
 - [x] ONNX classifier (`prism-pi-v1`)
-- [x] PyPI release ([0.1.8](https://pypi.org/project/prismguard/0.1.8/))
+- [x] PyPI release ([0.1.9](https://pypi.org/project/prismguard/0.1.9/))
 - [x] HTTP API (`prismguard serve`)
 - [x] ChorusGraph integration
 - [ ] Healthcare validation

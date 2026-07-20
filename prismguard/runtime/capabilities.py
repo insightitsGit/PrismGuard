@@ -19,6 +19,19 @@ _HASH_ONLY_PROFILES = frozenset(
     {"web_chat", "rules_only", "security_bench", "sidecar", "low_latency"}
 )
 
+def ascii_safe(text: str) -> str:
+    """Normalize Unicode punctuation for Windows console / cp1252 stdout."""
+    return (
+        text.replace("\u2192", "->")  # →
+        .replace("\u2014", "-")  # —
+        .replace("\u2013", "-")  # –
+        .replace("\u00a0", " ")  # nbsp
+        .replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2018", "'")
+        .replace("\u2019", "'")
+    )
+
 _PROFILE_CLASSIFIER_MODE = {
     "security_bench": "first",  # heavy
     "low_latency": "hybrid",  # light
@@ -50,12 +63,12 @@ def _taxonomy_status(profile: str) -> tuple[bool, str]:
     if profile == "security_bench":
         return (
             False,
-            "heavy/security_bench forces HashEmbedder / skip_taxonomy — use law_pilot for learn-from-seed",
+            "heavy/security_bench forces HashEmbedder / skip_taxonomy - use law_pilot for learn-from-seed",
         )
     if profile == "low_latency":
         return (
             False,
-            "light/low_latency forces HashEmbedder for speed — use law_pilot for learn-from-seed taxonomy",
+            "light/low_latency forces HashEmbedder for speed - use law_pilot for learn-from-seed taxonomy",
         )
     if profile in ("web_chat", "rules_only"):
         return False, f"{profile} is rules-first (skip_taxonomy)"
@@ -146,24 +159,26 @@ def guard_capabilities(
     if not onnx_ready and (
         onnx_opt_in() or prof in ("security_bench", "law_pilot", "low_latency")
     ):
-        notes.append("ONNX weights not ready — scorecard-class injection needs prismguard-model download.")
+        notes.append(
+            "ONNX weights not ready - scorecard-class injection needs prismguard-model download."
+        )
     if persistent:
         notes.append("Persistent storage backends require Team+ license (PRISMGUARD_LICENSE_FILE).")
     if not feedback:
-        notes.append("Feedback queue off — set PRISMGUARD_FEEDBACK_PERSIST=1 for export→train loop.")
+        notes.append("Feedback queue off - set PRISMGUARD_FEEDBACK_PERSIST=1 for export->train loop.")
     if prof == "security_bench":
         notes.append(
-            "HEAVY ONNX (security_bench): classifier_mode=first — max coverage / scorecard; "
-            "~350–500ms floor. Switch to light for production latency."
+            "HEAVY ONNX (security_bench): classifier_mode=first - max coverage / scorecard; "
+            "~350-500ms floor. Switch to light for production latency."
         )
     if prof == "low_latency":
         notes.append(
-            "LIGHT ONNX (low_latency): classifier_mode=hybrid — rules/structural first; "
+            "LIGHT ONNX (low_latency): classifier_mode=hybrid - rules/structural first; "
             "ONNX only when needed. Switch to heavy for scorecard-class always-on coverage."
         )
     if classifier_mode == "first" and prof not in ("security_bench",):
         notes.append(
-            "classifier_mode=first runs ONNX on nearly every request (~350–500ms floor). "
+            "classifier_mode=first runs ONNX on nearly every request (~350-500ms floor). "
             "Use create_checker_for_app('light') for hybrid, or 'heavy' intentionally."
         )
 
@@ -231,4 +246,4 @@ def format_capabilities(caps: dict[str, Any]) -> str:
     ]
     for note in caps.get("notes") or []:
         lines.append(f"  note: {note}")
-    return "\n".join(lines)
+    return ascii_safe("\n".join(lines))

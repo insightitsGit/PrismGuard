@@ -68,13 +68,22 @@ Expected: wheel **under 100 MB**, `model.onnx in wheel 0`, `cli_check True`, `be
 ```powershell
 $env:TWINE_USERNAME = "__token__"
 $env:TWINE_PASSWORD = "pypi-YOUR_TOKEN_HERE"
-twine upload dist/prismguard-0.1.8-py3-none-any.whl
-twine upload dist/prismguard-0.1.8.tar.gz
+twine upload dist/prismguard-0.1.9-py3-none-any.whl
+twine upload dist/prismguard-0.1.9.tar.gz
 ```
 
 Upload the **wheel first**; it is smaller and validates packaging.
 
-## What ships in 0.1.8
+## What ships in 0.1.9
+
+| Item | Included |
+|------|----------|
+| Windows-safe `prismguard caps` (ASCII CLI) | yes — fix over 0.1.8 |
+| Everything from 0.1.8 | yes |
+
+See [`RELEASE_NOTES_0.1.9.md`](RELEASE_NOTES_0.1.9.md).
+
+## What shipped in 0.1.8
 
 | Item | Included |
 |------|----------|
@@ -90,17 +99,16 @@ See [`RELEASE_NOTES_0.1.8.md`](RELEASE_NOTES_0.1.8.md).
 
 ## Post-publish
 
-1. Confirm package live: `pip install "prismguard==0.1.8"` then `prismguard --help` and `prismguard caps --help`.
-2. Confirm with extras: `pip install "prismguard[guard-model]==0.1.8" && prismguard-model download`
+1. Confirm package live: `pip install "prismguard==0.1.9"` then `prismguard caps --profile light`.
+2. Confirm with extras: `pip install "prismguard[guard-model]==0.1.9" && prismguard-model download`
 3. Confirm: `python -c "from prismguard.runtime.factory import create_checker_for_app; create_checker_for_app('light')"`
-4. Tag: `git tag v0.1.8 && git push origin v0.1.8` (only after you approve push)
+4. Tag: `git tag v0.1.9 && git push origin v0.1.9` (only after you approve push)
 
 ## Customer install
 
 ```bash
-pip install "prismguard[guard-model]==0.1.8"
+pip install "prismguard[guard-model]==0.1.9"
 prismguard-model download
-python -c "from prismguard.runtime.factory import create_checker_for_app; print(create_checker_for_app('light').check('Hi').decision)"
 prismguard caps --profile light
 prismguard eval self-check
 ```

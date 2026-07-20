@@ -183,15 +183,30 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def _safe_print(text: str) -> None:
+    """Print without crashing Windows cp1252 consoles on Unicode punctuation."""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        from prismguard.runtime.capabilities import ascii_safe
+
+        print(ascii_safe(text))
+
+
 def cmd_caps(args: argparse.Namespace) -> int:
     """Print onnx / taxonomy / feedback / storage readiness (DX for half-stack installs)."""
-    from prismguard.runtime.capabilities import format_capabilities, guard_capabilities
+    from prismguard.runtime.capabilities import ascii_safe, format_capabilities, guard_capabilities
 
     caps = guard_capabilities(profile=args.profile)
     if args.json:
-        print(json.dumps(caps, indent=2))
+        # Ensure note strings are ASCII-safe even in JSON pretty-print on Windows.
+        safe = dict(caps)
+        safe["notes"] = [ascii_safe(str(n)) for n in (caps.get("notes") or [])]
+        if safe.get("taxonomy_skip_reason"):
+            safe["taxonomy_skip_reason"] = ascii_safe(str(safe["taxonomy_skip_reason"]))
+        _safe_print(json.dumps(safe, indent=2, ensure_ascii=True))
     else:
-        print(format_capabilities(caps))
+        _safe_print(format_capabilities(caps))
     # Non-zero if claiming scorecard-ish profile without ONNX, or learn path without taxonomy.
     prof = str(caps.get("profile") or "")
     if prof in ("security_bench", "law_pilot", "low_latency") and not caps.get("onnx_ready"):
@@ -219,7 +234,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         if not ready:
             coherence_ok = False
             check["detail"] = (
-                "guard model not ready — install extras and download artifacts: "
+                "guard model not ready - install extras and download artifacts: "
                 "pip install prismguard[guard-model] && prismguard-model download"
             )
         report["checks"].append(check)
@@ -233,7 +248,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         if not exists:
             coherence_ok = False
     else:
-        report["checks"].append({"name": "tenant_lexicon", "ok": True, "detail": "optional — not enabled"})
+        report["checks"].append({"name": "tenant_lexicon", "ok": True, "detail": "optional - not enabled"})
 
     report["checks"].append({"name": "domains_available", "ok": True, "domains": list_domains()})
     report["checks"].append(

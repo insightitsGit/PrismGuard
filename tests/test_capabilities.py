@@ -5,6 +5,22 @@ from __future__ import annotations
 import pytest
 
 
+def test_ascii_safe_strips_arrows() -> None:
+    from prismguard.runtime.capabilities import ascii_safe
+
+    assert "->" in ascii_safe("export\u2192train")
+    assert "-" in ascii_safe("ready\u2014now")
+    # Must be encodable on Windows cp1252
+    ascii_safe("HEAVY ONNX \u2014 max coverage; export\u2192train").encode("cp1252")
+
+
+def test_format_capabilities_cp1252_safe() -> None:
+    from prismguard.runtime.capabilities import format_capabilities, guard_capabilities
+
+    text = format_capabilities(guard_capabilities(profile="light", probe_onnx=False))
+    text.encode("cp1252")
+
+
 def test_web_chat_caps_taxonomy_false() -> None:
     from prismguard.runtime.capabilities import guard_capabilities
 

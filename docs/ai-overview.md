@@ -1,7 +1,7 @@
 # AI / LLM context — PrismGuard
 
 > Concise reference for humans and coding assistants (Cursor, Copilot, Claude, ChatGPT, Windsurf, Gemini).  
-> Do not invent APIs beyond this file and `prismguard/`. Package: **`prismguard` 0.1.8**, import **`prismguard`**.
+> Do not invent APIs beyond this file and `prismguard/`. Package: **`prismguard` 0.1.9**, import **`prismguard`**.
 
 ---
 
@@ -60,7 +60,7 @@ result: CheckResult = checker.check(user_prompt)
 CLI:
 
 ```bash
-pip install "prismguard[prism,guard-model]==0.1.8"
+pip install "prismguard[prism,guard-model]==0.1.9"
 prismguard-model download
 export PRISMGUARD_USE_ONNX=1
 export PRISMGUARD_FEEDBACK_PERSIST=1
