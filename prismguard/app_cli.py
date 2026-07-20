@@ -183,6 +183,22 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_caps(args: argparse.Namespace) -> int:
+    """Print onnx / taxonomy / feedback / storage readiness (DX for half-stack installs)."""
+    from prismguard.runtime.capabilities import format_capabilities, guard_capabilities
+
+    caps = guard_capabilities(profile=args.profile)
+    if args.json:
+        print(json.dumps(caps, indent=2))
+    else:
+        print(format_capabilities(caps))
+    # Non-zero if claiming scorecard-ish profile without ONNX, or learn path without taxonomy.
+    prof = str(caps.get("profile") or "")
+    if prof in ("security_bench", "law_pilot", "low_latency") and not caps.get("onnx_ready"):
+        return 1
+    return 0
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     report: dict = {"checks": [], "ok": True}
     cfg = load_triage_config(Path(args.config) if args.config else None)
@@ -348,6 +364,17 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor_cmd.add_argument("--config", type=Path, default=None)
     doctor_cmd.add_argument("--backend", default=None)
 
+    caps_cmd = sub.add_parser(
+        "caps",
+        help="Print capability truth table (onnx, prismrag taxonomy, feedback, storage, domain, lexicon)",
+    )
+    caps_cmd.add_argument(
+        "--profile",
+        default=None,
+        help="App profile to evaluate (default: PRISMGUARD_APP_PROFILE or web_chat)",
+    )
+    caps_cmd.add_argument("--json", action="store_true", help="Emit JSON")
+
     check_cmd = sub.add_parser("check", help="Check one prompt and print an auditable decision")
     check_cmd.add_argument("text", help="Prompt text to classify")
     check_cmd.add_argument("--json", action="store_true", help="Emit JSON instead of human-readable output")
@@ -403,6 +430,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(cmd_init(args))
     if args.command == "doctor":
         raise SystemExit(cmd_doctor(args))
+    if args.command == "caps":
+        raise SystemExit(cmd_caps(args))
     if args.command == "check":
         raise SystemExit(cmd_check(args))
     if args.command == "context":

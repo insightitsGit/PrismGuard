@@ -2,6 +2,11 @@
 
 **Authoritative run (2026-07-09).** Cite via `benchmark/law/results/current/`. Supersedes `verified/`, `latest/`, and `post-holdout-fix/`.
 
+> **Reproduce path — do not expect these rates from `web_chat` / `rules_only` / `[guard-model]` alone.**  
+> Cited CPL row uses in-process `PrismGuardGate` with **law domain**, **ONNX `prism-pi-v1`**, authored seed + legal overlay (bench), selective escalation (blended ~200 ms).  
+> App shorthand: `create_checker_for_app("law_pilot", use_onnx=True)` or `security_bench` after `pip install "prismguard[prism,guard-model]"` + `prismguard-model download`.  
+> `classifier_mode: first` / always-on ONNX ≈ ~350 ms — expected. Learn-from-seed needs `[prism]` + `law_pilot` (not `security_bench` skip_taxonomy). See `docs/scorecard.md`.
+
 ## Cost / speed (client request_latency_ms first)
 
 _Primary latency = HTTP client wall clock (`request_latency_ms`). Guard-only = `guard_latency_ms`. In-process pipeline = `pipeline_latency_ms`._

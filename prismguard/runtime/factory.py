@@ -6,7 +6,30 @@ import os
 import threading
 from typing import Any, Literal
 
-AppProfile = Literal["web_chat", "law_pilot", "sidecar", "rules_only"]
+AppProfile = Literal[
+    "web_chat",
+    "law_pilot",
+    "sidecar",
+    "rules_only",
+    "security_bench",
+    "low_latency",
+    "heavy",  # alias → security_bench (always-on ONNX)
+    "light",  # alias → low_latency (hybrid / selective ONNX)
+]
+
+ClassifierMode = Literal["first", "parallel", "gray_only", "hybrid"]
+_VALID_CLASSIFIER_MODES = frozenset({"first", "parallel", "gray_only", "hybrid"})
+
+# Canonical names for the two ONNX intensity options (both worlds).
+_PROFILE_ALIASES: dict[str, AppProfile] = {
+    "heavy": "security_bench",
+    "light": "low_latency",
+    # Friendly synonyms
+    "onnx_heavy": "security_bench",
+    "onnx_light": "low_latency",
+    "onnx_first": "security_bench",
+    "onnx_hybrid": "low_latency",
+}
 
 _SINGLETONS: dict[str, Any] = {}
 _SINGLETON_LOCK = threading.Lock()
@@ -64,6 +87,35 @@ def create_checker_rules_only(*, seed_profile: str | None = None) -> Any:
     )
 
 
+def resolve_classifier_mode(
+    explicit: ClassifierMode | str | None = None,
+    *,
+    profile_default: ClassifierMode | None = None,
+) -> ClassifierMode | None:
+    """
+    Resolve classifier_mode override.
+
+    Precedence: explicit arg → ``PRISMGUARD_CLASSIFIER_MODE`` → profile_default → None (YAML).
+    """
+    for candidate in (explicit, os.environ.get("PRISMGUARD_CLASSIFIER_MODE", "").strip(), profile_default):
+        if not candidate:
+            continue
+        mode = str(candidate).strip().lower()
+        if mode in _VALID_CLASSIFIER_MODES:
+            return mode  # type: ignore[return-value]
+        raise ValueError(
+            f"Invalid classifier_mode {candidate!r}. "
+            f"Expected one of: {', '.join(sorted(_VALID_CLASSIFIER_MODES))}"
+        )
+    return None
+
+
+def normalize_app_profile(profile: str) -> AppProfile:
+    """Map aliases (``heavy`` / ``light``) to canonical profile names."""
+    key = (profile or "").strip().lower()
+    return _PROFILE_ALIASES.get(key, key)  # type: ignore[return-value]
+
+
 def create_checker_for_app(
     profile: AppProfile = "web_chat",
     *,
@@ -71,6 +123,7 @@ def create_checker_for_app(
     domain: str | None = None,
     seed_profile: str | None = None,
     shadow_onnx: bool | None = None,
+    classifier_mode: ClassifierMode | str | None = None,
 ) -> Any:
     """
     First-class factory for product integrations.
@@ -79,19 +132,57 @@ def create_checker_for_app(
     --------
     web_chat / rules_only
         ONNX off by default, HashEmbedder, no corpus ANN, fail_open gray policy.
+        Hub / FAQ path — do **not** compare to the published law scorecard.
     law_pilot
         Law domain pack + ONNX when ``PRISMGUARD_USE_ONNX=1`` or ``use_onnx=True``.
+        Soft: may degrade to rules if weights missing. YAML ``classifier_mode``
+        (default ``first``) unless overridden via ``classifier_mode=`` /
+        ``PRISMGUARD_CLASSIFIER_MODE``.
+        **Prefer this for learn-from-seed / word-graph:** with ``pip install
+        "prismguard[prism]"`` and without ``PRISMGUARD_OFFLINE``, seed import
+        builds prismrag taxonomy. Pair with ``PRISMGUARD_FEEDBACK_PERSIST=1``.
+    heavy / security_bench
+        **Heavy ONNX** — always-on classifier (``classifier_mode: first``).
+        Max injection coverage / scorecard parity; ~350–500 ms floor.
+        Raises if ``model.onnx`` missing. Skip taxonomy.
+    light / low_latency
+        **Light ONNX** — selective classifier (``classifier_mode: hybrid``).
+        Rules/structural short-circuit first; ONNX only when needed.
+        Best production/stack latency; raises if weights missing. Skip taxonomy.
     sidecar
         Same as env-driven HTTP defaults; ONNX still requires explicit opt-in.
+        HashEmbedder by default (not taxonomy).
+
+    See also: ``prismguard.runtime.capabilities.guard_capabilities`` / ``prismguard caps``.
     """
+    profile = normalize_app_profile(profile)
+
     if profile in ("web_chat", "rules_only"):
         checker = create_checker_rules_only(seed_profile=seed_profile)
         if shadow_onnx or (shadow_onnx is None and env_flag("PRISMGUARD_SHADOW_ONNX")):
             return _wrap_shadow_onnx(checker, domain=domain or "law")
         if use_onnx is True or (use_onnx is None and onnx_opt_in()):
             # Explicit opt-in on web_chat still allowed for experiments.
-            return _rebuild_with_onnx(checker, domain=domain, seed_profile=seed_profile, shadow=False)
+            return _rebuild_with_onnx(
+                checker,
+                domain=domain,
+                seed_profile=seed_profile,
+                shadow=False,
+                classifier_mode=classifier_mode,
+            )
         return checker
+
+    if profile == "security_bench":
+        return _create_security_bench_checker(
+            seed_profile=seed_profile,
+            classifier_mode=classifier_mode,
+        )
+
+    if profile == "low_latency":
+        return _create_low_latency_checker(
+            seed_profile=seed_profile,
+            classifier_mode=classifier_mode,
+        )
 
     return _build_full_checker(
         domain=domain if domain is not None else ("law" if profile == "law_pilot" else _default_domain()),
@@ -99,7 +190,61 @@ def create_checker_for_app(
         use_onnx=use_onnx,
         shadow_onnx=bool(shadow_onnx) if shadow_onnx is not None else env_flag("PRISMGUARD_SHADOW_ONNX"),
         force_hash_embedder=offline_mode() or profile != "law_pilot",
+        classifier_mode=resolve_classifier_mode(classifier_mode),
     )
+
+
+def _require_onnx_ready(checker: Any, *, profile: str) -> Any:
+    gm = getattr(checker, "_guard_model", None)
+    if gm is None or not getattr(gm, "is_ready", False):
+        raise RuntimeError(
+            f"{profile} requires ONNX weights. "
+            "Install extras and download the artifact, then retry:\n"
+            '  pip install "prismguard[prism,guard-model]"\n'
+            "  prismguard-model download\n"
+            "  export PRISMGUARD_USE_ONNX=1\n"
+            "Tip: use create_checker_for_app('light') for hybrid/faster ONNX, "
+            "or 'heavy' for always-on ONNX (scorecard)."
+        )
+    return checker
+
+
+def _create_security_bench_checker(
+    *,
+    seed_profile: str | None = None,
+    classifier_mode: ClassifierMode | str | None = None,
+) -> Any:
+    """Law + ONNX + classifier_mode first; fail loudly if weights missing."""
+    os.environ["PRISMGUARD_USE_ONNX"] = "1"
+    mode = resolve_classifier_mode(classifier_mode, profile_default="first")
+    checker = _build_full_checker(
+        domain="law",
+        seed_profile=seed_profile,
+        use_onnx=True,
+        shadow_onnx=False,
+        force_hash_embedder=True,
+        classifier_mode=mode or "first",
+    )
+    return _require_onnx_ready(checker, profile="security_bench")
+
+
+def _create_low_latency_checker(
+    *,
+    seed_profile: str | None = None,
+    classifier_mode: ClassifierMode | str | None = None,
+) -> Any:
+    """Law + ONNX + hybrid (skip ONNX on tier1/structural); fail loud if weights missing."""
+    os.environ["PRISMGUARD_USE_ONNX"] = "1"
+    mode = resolve_classifier_mode(classifier_mode, profile_default="hybrid")
+    checker = _build_full_checker(
+        domain="law",
+        seed_profile=seed_profile,
+        use_onnx=True,
+        shadow_onnx=False,
+        force_hash_embedder=True,
+        classifier_mode=mode or "hybrid",
+    )
+    return _require_onnx_ready(checker, profile="low_latency")
 
 
 def create_checker_from_env() -> Any:
@@ -117,7 +262,17 @@ def create_checker_from_env() -> Any:
     if not profile:
         # Base install / CLI headline path — rules-first, no surprise prismrag hard-fail.
         profile = "web_chat"
-    if profile in ("web_chat", "rules_only", "law_pilot", "sidecar"):
+    profile = normalize_app_profile(profile)
+    if profile in (
+        "web_chat",
+        "rules_only",
+        "law_pilot",
+        "sidecar",
+        "security_bench",
+        "low_latency",
+        "heavy",
+        "light",
+    ):
         return get_or_create_checker(profile)  # type: ignore[arg-type]
     return _build_full_checker(
         domain=_default_domain(),
@@ -125,12 +280,18 @@ def create_checker_from_env() -> Any:
         use_onnx=None,
         shadow_onnx=env_flag("PRISMGUARD_SHADOW_ONNX"),
         force_hash_embedder=offline_mode(),
+        classifier_mode=resolve_classifier_mode(None),
     )
 
 
 def get_or_create_checker(profile: AppProfile = "web_chat") -> Any:
     """Thread-safe process singleton for app workers."""
-    key = f"{profile}:{os.environ.get('PRISMGUARD_DOMAIN', '')}:{onnx_opt_in()}:{offline_mode()}"
+    profile = normalize_app_profile(profile)
+    mode = os.environ.get("PRISMGUARD_CLASSIFIER_MODE", "")
+    key = (
+        f"{profile}:{os.environ.get('PRISMGUARD_DOMAIN', '')}:"
+        f"{onnx_opt_in()}:{offline_mode()}:{mode}"
+    )
     with _SINGLETON_LOCK:
         existing = _SINGLETONS.get(key)
         if existing is not None:
@@ -159,6 +320,7 @@ def _build_full_checker(
     use_onnx: bool | None,
     shadow_onnx: bool,
     force_hash_embedder: bool,
+    classifier_mode: ClassifierMode | None = None,
 ) -> Any:
     from prismguard.config.loader import load_triage_config
     from prismguard.runtime.check import RuntimeChecker
@@ -191,6 +353,13 @@ def _build_full_checker(
         )
 
     cfg = load_triage_config(domain=domain)
+    mode = resolve_classifier_mode(classifier_mode)
+    if mode is not None:
+        cfg = cfg.model_copy(
+            update={
+                "guard_model": cfg.guard_model.model_copy(update={"classifier_mode": mode}),
+            }
+        )
     if force_hash_embedder or offline_mode() or not cfg.embedding.corpus_path_enabled:
         cfg = cfg.model_copy(
             update={
@@ -267,7 +436,14 @@ def _build_full_checker(
     return checker
 
 
-def _rebuild_with_onnx(base: Any, *, domain: str | None, seed_profile: str | None, shadow: bool) -> Any:
+def _rebuild_with_onnx(
+    base: Any,
+    *,
+    domain: str | None,
+    seed_profile: str | None,
+    shadow: bool,
+    classifier_mode: ClassifierMode | str | None = None,
+) -> Any:
     _ = base
     return _build_full_checker(
         domain=domain,
@@ -275,6 +451,7 @@ def _rebuild_with_onnx(base: Any, *, domain: str | None, seed_profile: str | Non
         use_onnx=True,
         shadow_onnx=shadow,
         force_hash_embedder=True,
+        classifier_mode=resolve_classifier_mode(classifier_mode),
     )
 
 

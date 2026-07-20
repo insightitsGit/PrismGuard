@@ -15,7 +15,9 @@ guard_model:
   # Library factories require PRISMGUARD_USE_ONNX=1 to load ONNX (opt-in). YAML enabled
   # still means "allowed when env opts in"; web_chat profile forces off.
   enabled: true
-  classifier_mode: first  # first | parallel | gray_only | hybrid — hybrid skips ONNX on tier1/structural blocks
+  # first = always-on ONNX (~350–500ms floor). hybrid = production/stack latency path.
+  # App profiles: security_bench→first, low_latency→hybrid. Override: PRISMGUARD_CLASSIFIER_MODE.
+  classifier_mode: first  # first | parallel | gray_only | hybrid
   artifact_id: prism-pi-v1  # law-bench-oriented; not calibrated for general product FAQ chat
   artifact_path: ""  # optional override; or set PRISMGUARD_GUARD_MODEL_PATH
   uncertain_low: 0.35

@@ -34,6 +34,29 @@ def _default_ort_inter_threads() -> int:
     return 1
 
 
+def _ort_providers() -> list[str]:
+    """
+    Select ORT execution providers.
+
+    Override with comma-separated ``PRISMGUARD_ORT_PROVIDERS``
+    (e.g. ``CUDAExecutionProvider,CPUExecutionProvider``).
+    Default: first available of CUDA → Dml → CoreML → CPU.
+    """
+    explicit = os.environ.get("PRISMGUARD_ORT_PROVIDERS", "").strip()
+    if explicit:
+        return [p.strip() for p in explicit.split(",") if p.strip()]
+    ort = require_onnxruntime()
+    available = set(ort.get_available_providers())
+    preferred = (
+        "CUDAExecutionProvider",
+        "DmlExecutionProvider",
+        "CoreMLExecutionProvider",
+        "CPUExecutionProvider",
+    )
+    chosen = [p for p in preferred if p in available]
+    return chosen or ["CPUExecutionProvider"]
+
+
 def _dynamic_pad_length(token_len: int, *, max_length: int) -> int:
     """Pad to next multiple of 8 (ORT-friendly) without always padding to max_length."""
     if token_len <= 0:
@@ -69,6 +92,7 @@ class ONNXPromptInjectionClassifier:
         self._tokenizer = tokenizer
         self._uncertain_low = uncertain_low
         self._uncertain_high = uncertain_high
+        self._providers: list[str] = []
         calibration = load_calibration(artifact_dir)
         self._temperature = calibration.temperature if calibration else card.calibration_temperature
         self._warmed_up = False
@@ -114,11 +138,15 @@ class ONNXPromptInjectionClassifier:
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         session_options.intra_op_num_threads = _default_ort_intra_threads()
         session_options.inter_op_num_threads = _default_ort_inter_threads()
+        # Prefer sequential for single-request CPU latency over multi-stream overhead.
+        if hasattr(ort, "ExecutionMode"):
+            session_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
 
+        providers = _ort_providers()
         session = ort.InferenceSession(
             str(onnx_path),
             session_options,
-            providers=["CPUExecutionProvider"],
+            providers=providers,
         )
         tokenizer = Tokenizer.from_file(str(tokenizer_path))
         instance = cls(
@@ -129,8 +157,12 @@ class ONNXPromptInjectionClassifier:
             uncertain_low=uncertain_low,
             uncertain_high=uncertain_high,
         )
+        instance._providers = list(session.get_providers())  # noqa: SLF001
         if os.environ.get("PRISMGUARD_ORT_WARMUP", "1").strip().lower() not in ("0", "false", "no"):
+            # Warm short + medium lengths so dynamic pad paths are primed.
             instance.warmup()
+            instance.predict("warmup medium length prompt for ORT kernel cache " * 4)
+            instance._warmed_up = True
         return instance
 
     def warmup(self) -> None:
@@ -182,6 +214,7 @@ class ONNXPromptInjectionClassifier:
                 "artifact_dir": str(self._artifact_dir),
                 "calibration_temperature": self._temperature,
                 "sequence_length": int(input_ids.shape[1]),
+                "ort_providers": list(self._providers),
             },
         )
 

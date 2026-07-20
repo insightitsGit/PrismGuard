@@ -139,6 +139,27 @@ rules:
     severity: high
     rationale: DAN + ignore safety paraphrases
     created_by: seed-v0-dogfood1
+  - rule_id: R-0203
+    pattern: '(?i)\b(do anything now|dan mode|jailbreak mode|enable jailbreak)\b'
+    pattern_type: regex
+    category_slug: roleplay_jailbreak
+    severity: high
+    rationale: stack-suite jailbreak persona / mode phrasing (pre-ONNX)
+    created_by: seed-v0-perf1
+  - rule_id: R-0204
+    pattern: '(?i)\b(unfiltered|uncensored)\s+(mode|ai|assistant|model)\b'
+    pattern_type: regex
+    category_slug: roleplay_jailbreak
+    severity: high
+    rationale: uncensored/unfiltered mode jailbreak (stack S1)
+    created_by: seed-v0-perf1
+  - rule_id: R-0147
+    pattern: '(?i)\bfrom now on\b.{0,40}\b(you will|you must|ignore|disregard)\b'
+    pattern_type: regex
+    category_slug: direct_instruction_override
+    severity: high
+    rationale: from-now-on instruction override (stack paraphrases)
+    created_by: seed-v0-perf1
   - rule_id: R-0301
     pattern: 'repeat everything above|print your system prompt|what are your (exact )?instructions'
     pattern_type: regex
@@ -146,6 +167,13 @@ rules:
     severity: high
     rationale: canonical exfiltration phrasing
     created_by: seed-v0
+  - rule_id: R-0302
+    pattern: '(?i)\b(reveal|show|dump|expose)\b.{0,40}\b(system prompt|system message|hidden instructions?)\b'
+    pattern_type: regex
+    category_slug: system_prompt_exfiltration
+    severity: high
+    rationale: reveal/dump system prompt paraphrases (stack S1)
+    created_by: seed-v0-perf1
   - rule_id: R-0401
     pattern: 'never (refuse|apologize|say you can.?t)'
     pattern_type: regex

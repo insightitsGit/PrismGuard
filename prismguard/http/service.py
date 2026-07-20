@@ -74,7 +74,7 @@ def create_app():
 
     app = FastAPI(
         title="PrismGuard API",
-        version="0.1.6",
+        version="0.1.8",
         description="Audited prompt-injection guard service (Business tier).",
     )
 

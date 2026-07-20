@@ -399,6 +399,12 @@ class RuntimeChecker:
     def _mark_classifier_invoked(details: dict) -> dict:
         return {**details, "classifier_invoked": True}
 
+    def _cancel_classifier_future(self, future: Future[GuardModelVerdict] | None) -> None:
+        """Best-effort cancel when a short-circuit gate wins (classifier_mode=first)."""
+        if future is None or future.done():
+            return
+        future.cancel()
+
     def _attach_optional_classifier_details(
         self,
         details: dict,
@@ -408,9 +414,16 @@ class RuntimeChecker:
     ) -> dict:
         if future is None:
             return details
+        if not await_verdict and not future.done():
+            # Short-circuit path: do not wait on ONNX; drop the orphaned work if possible.
+            self._cancel_classifier_future(future)
+            return {**details, "classifier_started": True, "classifier_awaited": False}
         details = self._mark_classifier_invoked(details)
         if await_verdict or future.done():
-            verdict = future.result()
+            try:
+                verdict = future.result()
+            except Exception:
+                return {**details, "classifier_started": True, "classifier_awaited": False}
             return self._attach_classifier_details(details, verdict)
         return details
 

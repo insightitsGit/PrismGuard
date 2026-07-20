@@ -68,37 +68,40 @@ Expected: wheel **under 100 MB**, `model.onnx in wheel 0`, `cli_check True`, `be
 ```powershell
 $env:TWINE_USERNAME = "__token__"
 $env:TWINE_PASSWORD = "pypi-YOUR_TOKEN_HERE"
-twine upload dist/prismguard-0.1.6-py3-none-any.whl
-twine upload dist/prismguard-0.1.6.tar.gz
+twine upload dist/prismguard-0.1.8-py3-none-any.whl
+twine upload dist/prismguard-0.1.8.tar.gz
 ```
 
 Upload the **wheel first**; it is smaller and validates packaging.
 
-## What ships in 0.1.6
+## What ships in 0.1.8
 
 | Item | Included |
 |------|----------|
-| Customer/hub ONNX train path (opt-in) | yes — OnnxCustomer1 |
-| `prismguard feedback export` | yes |
-| `--domain-pack` / `corpus-plan` / hub train pack | yes |
-| `PRISMGUARD_ARTIFACT_ID` / path override | yes |
-| Dogfood1 factories + ONNX opt-in | yes (from 0.1.5) |
+| `light` / `heavy` factory profiles (+ aliases) | yes |
+| `prismguard caps` / `guard_capabilities` | yes |
+| ORT provider selection + hybrid short-circuit | yes |
+| Stack Tier-1 / structural jailbreak patterns | yes |
+| Examples + best practices + compare_profiles | yes (examples in sdist; scripts in git) |
+| Prior: feedback export, domain-pack train, dogfood factories | yes (0.1.5–0.1.7) |
 | ONNX `model.onnx` weights | **no** — reuse v0.1.2 GitHub asset for `prism-pi-v1` |
+
+See [`RELEASE_NOTES_0.1.8.md`](RELEASE_NOTES_0.1.8.md).
 
 ## Post-publish
 
-1. Confirm package live: `pip install "prismguard==0.1.6"` then `prismguard --help` and `prismguard feedback export -h`.
-2. Confirm with extras: `pip install "prismguard[guard-model]==0.1.6" && prismguard-model download`
-3. Update README pins/URLs to 0.1.6
-4. Tag: `git tag v0.1.6 && git push origin v0.1.6`
+1. Confirm package live: `pip install "prismguard==0.1.8"` then `prismguard --help` and `prismguard caps --help`.
+2. Confirm with extras: `pip install "prismguard[guard-model]==0.1.8" && prismguard-model download`
+3. Confirm: `python -c "from prismguard.runtime.factory import create_checker_for_app; create_checker_for_app('light')"`
+4. Tag: `git tag v0.1.8 && git push origin v0.1.8` (only after you approve push)
 
 ## Customer install
 
 ```bash
-pip install "prismguard[guard-model]"
+pip install "prismguard[guard-model]==0.1.8"
 prismguard-model download
-prismguard init --domain law
-prismguard check "your prompt"
+python -c "from prismguard.runtime.factory import create_checker_for_app; print(create_checker_for_app('light').check('Hi').decision)"
+prismguard caps --profile light
 prismguard eval self-check
 ```
 

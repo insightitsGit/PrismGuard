@@ -48,6 +48,28 @@ def test_web_chat_profile_allows_hi() -> None:
     assert result.decision != "block"
 
 
+def test_security_bench_fails_loudly_without_onnx(monkeypatch) -> None:
+    """Scorecard path must not silently degrade to rules-only."""
+    from prismguard.runtime import factory as factory_mod
+
+    monkeypatch.setattr(factory_mod, "_build_full_checker", lambda **kwargs: type("C", (), {"_guard_model": None})())
+    with pytest.raises(RuntimeError, match="security_bench requires ONNX"):
+        factory_mod.create_checker_for_app("security_bench")
+
+
+def test_security_bench_ok_when_guard_ready(monkeypatch) -> None:
+    from prismguard.runtime import factory as factory_mod
+
+    ready = type("GM", (), {"is_ready": True})()
+    monkeypatch.setattr(
+        factory_mod,
+        "_build_full_checker",
+        lambda **kwargs: type("C", (), {"_guard_model": ready})(),
+    )
+    checker = factory_mod.create_checker_for_app("security_bench")
+    assert checker._guard_model is ready  # noqa: SLF001
+
+
 def test_domain_default_is_not_law(monkeypatch) -> None:
     from prismguard.runtime.factory import _default_domain
 

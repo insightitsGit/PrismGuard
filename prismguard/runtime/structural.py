@@ -19,6 +19,7 @@ class StructuralResult:
 
 _OVERRIDE_PATTERNS = (
     re.compile(r"\bignore\b.{0,30}\b(previous|prior|above)\b.{0,20}\binstructions?\b", re.I),
+    re.compile(r"\bignore\b.{0,30}\b(previous|prior|above)\b.{0,20}\b(rules|policies|prompts?)\b", re.I),
     re.compile(r"\bdisregard\b.{0,20}\b(everything|all)\b", re.I),
     re.compile(r"\bdisregard\b.{0,40}\b(your |the )?(rules|policies|safety|guidelines)\b", re.I),
     re.compile(r"\bnew system instructions?\b", re.I),
@@ -29,6 +30,11 @@ _OVERRIDE_PATTERNS = (
     re.compile(r"\bmake an exception\b.{0,40}\b(for me|confidential|privilege)\b", re.I),
     re.compile(r"\brepeat\b.{0,30}\b(instructions?|everything)\b.{0,20}\babove\b", re.I),
     re.compile(r"\bignore safety\b", re.I),
+    # Stack / general jailbreak paraphrases (pre-ONNX short-circuit for hybrid/low_latency)
+    re.compile(r"\bfrom now on\b.{0,40}\b(you will|you must|ignore|disregard)\b", re.I),
+    re.compile(r"\bdo anything now\b|\bdo.?anything.?now\b", re.I),
+    re.compile(r"\bjailbreak\b.{0,40}\b(mode|enabled|activated|prompt)\b", re.I),
+    re.compile(r"\benable jailbreak\b|\bjailbreak mode\b", re.I),
 )
 
 _ROLE_PATTERNS = (
@@ -42,6 +48,8 @@ _ROLE_PATTERNS = (
     re.compile(r"\bno restrictions\b", re.I),
     re.compile(r"\bno ethics duties\b", re.I),
     re.compile(r"\bwithout (any )?content policy\b", re.I),
+    re.compile(r"\bwithout (any )?(filters?|guardrails?|safety)\b", re.I),
+    re.compile(r"\b(unfiltered|uncensored) (mode|ai|assistant|model)\b", re.I),
 )
 
 _REFUSAL_PATTERNS = (
@@ -78,6 +86,8 @@ _ROLE_JUDGE_DISCLOSURE = re.compile(
 
 _EXFIL_PATTERNS = (
     re.compile(r"\boutput\b.{0,30}\b(hidden system|system message|scoring rubric)\b", re.I),
+    re.compile(r"\b(reveal|show|print|dump|expose)\b.{0,40}\b(system prompt|system message|hidden instructions?)\b", re.I),
+    re.compile(r"\bwhat (are|is) your (system |hidden )?instructions?\b", re.I),
     re.compile(r"\battacker\.example\b", re.I),
     re.compile(r"\bexternal@proton\.me\b", re.I),
     re.compile(r"\bemail\b.{0,40}\b(privilege log|json)\b", re.I),
@@ -166,6 +176,11 @@ _SUSPICIOUS_NGRAMS = (
     "you are now",
     "pretend you are",
     "no restrictions",
+    "do anything now",
+    "from now on you",
+    "uncensored mode",
+    "unfiltered mode",
+    "reveal the system",
     "execute",
     "exfil",
     "proton.me",
@@ -276,7 +291,11 @@ def analyze_structural(
         if pattern.search(text):
             attack += 0.30
             hits.append("role_assignment")
-            if re.search(r"\bDAN\b|dan mode|ignore safety", text, re.I):
+            if re.search(
+                r"\bDAN\b|dan mode|ignore safety|uncensored mode|unfiltered mode|do anything now",
+                text,
+                re.I,
+            ):
                 attack = max(attack, 0.88)
                 hits.append("dan_jailbreak")
             break
@@ -294,6 +313,13 @@ def analyze_structural(
         if pattern.search(text):
             attack += 0.25
             hits.append("exfiltration")
+            if re.search(
+                r"\b(reveal|show|print|dump|expose)\b.{0,40}\b(system prompt|system message|hidden instructions?)\b",
+                text,
+                re.I,
+            ):
+                attack = max(attack, 0.88)
+                hits.append("system_prompt_exfil")
             break
     for pattern in _OUTPUT_URL_EXFIL_PATTERNS:
         if pattern.search(text):
