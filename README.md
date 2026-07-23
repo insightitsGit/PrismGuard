@@ -46,7 +46,7 @@ Use this as the integrator checklist. Combine rows — do not stop at the first 
 | 7 | **Shadow ONNX** (observe, don’t enforce) | `#2` weights + `PRISMGUARD_SHADOW_ONNX=1` | `create_checker_for_app("web_chat", shadow_onnx=True)` | Verdict in `details["shadow_onnx"]` only. |
 | 8 | **Tenant lexicon** (customer words) | `PRISMGUARD_TENANT_LEXICON_PATH=…` | any full path | Production lexicon: **Business+**. |
 | 9 | **Persistent DB seed / feedback** | `PRISMGUARD_STORAGE_BACKEND=pgvector` + `PRISMGUARD_STORAGE_DSN` + license | any full path | **Team+**. Memory is OSS default. |
-| 10 | **ChorusGraph guard node** | `#1`–`#5` as needed | `make_guard_handler` + `route_after_guard` | Guard **before** cache/RAG. Examples below. |
+| 10 | **ChorusGraph guard node** | `#1`–`#5` as needed | `make_guard_handler` + `route_after_guard` | Guard **before** cache/RAG. **Finance/hub UX → `#1 web_chat` (ONNX off)**; do not set `PRISMGUARD_USE_ONNX=1` globally. Examples below. |
 | 11 | **HTTP sidecar** | `pip install "prismguard[serve,enterprise,…]"` + license | `prismguard serve` | **Business+**. |
 | 12 | **Output scan** (post-LLM) | library | `scan_output(response)` | Complements input `check()`. |
 | 13 | **Verify what you actually enabled** | — | `prismguard caps --profile <name>` | Truth table: `onnx_tier`, `prismrag_taxonomy`, `feedback_persist`, … |
@@ -496,6 +496,63 @@ checker = create_checker_for_app("light")  # or "heavy" / law_pilot+use_onnx=Tru
 guard = make_guard_handler(checker, block_on=frozenset({"block", "gray"}))
 # START → guard → [end | retrieve…]  BEFORE cache hops
 ```
+
+#### Finance / hub agents with ChorusGraph (recommended wiring)
+
+**Wiring changes outcomes more than “install more features.”** On a finance smoke harness (FinancePackBench, 2026-07-22; pins `prismguard==0.1.9` + `chorusgraph==1.3.0` + `prismshine==0.2.2`), forcing law ONNX onto hub ingress false-blocked FX questions; the same pins with the pattern below reached **100% task / 100% PI allow+block** on that smoke set (n=5/suite — illustrative, **not** a law scorecard claim).
+
+```text
+User → web_chat (ONNX OFF) → ChorusGraph → Shine finance (output)
+         └─ optional shadow light ONNX (observe only)
+```
+
+| Layer | Profile / API | Role |
+|-------|---------------|------|
+| Ingress | `create_checker_for_app("web_chat", use_onnx=False)` | Low-FP allow/block for FAQ, FX, customer chat |
+| Shadow | `create_checker_for_app("light", use_onnx=True)` | Log `would_block` only — **do not** block the agent until FP gates pass |
+| Graph | `make_guard_handler` + `route_after_guard` | **Before** cache / tools / LLM |
+| Output | PrismShine `finance` (separate package) | Ground tool/FAQ claims; complements input Guard |
+
+```python
+import os
+from prismguard.integrations.chorusgraph import (
+    create_checker_for_app,
+    make_guard_handler,
+    route_after_guard,
+)
+
+# Critical: do NOT export PRISMGUARD_USE_ONNX=1 for hub/finance UX.
+# That forces the law ONNX artifact into every profile and false-blocks FX.
+os.environ["PRISMGUARD_USE_ONNX"] = "0"
+
+guard = create_checker_for_app("web_chat", use_onnx=False)
+shadow = create_checker_for_app("light", use_onnx=True)  # observe only
+
+guard_node = make_guard_handler(
+    guard,
+    text_key="message",
+    session_id_key="session_id",
+    block_on=frozenset({"block"}),  # hub: gray continues
+)
+# START → guard_node → [end | agent…]
+# After each model answer: ShineGate.build(profile="finance").verify(...)
+```
+
+**Do**
+
+- Use `#1 web_chat` for finance hub / FAQ / marketing chat.
+- Keep FAQ / policy text in **conversation history or retrieval**, not in the Guard/agent `message` string when using ChorusGraph compound routing.
+- Log `resolution_gate` on every decision; promote shadow ONNX to enforce only after benign-allow gates are green.
+- Verify: `prismguard caps --profile web_chat` (expect ONNX off on ingress).
+
+**Don’t**
+
+- Set `PRISMGUARD_USE_ONNX=1` globally “to turn features on.”
+- Put `law_pilot` + ONNX on customer FX/FAQ ingress (use `#5` for learn/scorecard loops, not hub UX).
+- Cite law COMPARISON_REPORT / scorecard rates from the `web_chat` path.
+- Assume input Guard replaces output grounding (pair PrismShine or `#12` output scan).
+
+**Related:** [`examples/chorusgraph_hub_guard.py`](examples/chorusgraph_hub_guard.py) · [`examples/05_shadow_onnx.py`](examples/05_shadow_onnx.py) · [`docs/best-practices.md`](docs/best-practices.md)
 
 ## Advanced usage
 

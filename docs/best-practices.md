@@ -33,6 +33,7 @@ ChorusGraph / agent graph?
 **Don’t**
 - Cite law scorecard / COMPARISON_REPORT numbers from this path.
 - Force `PRISMGUARD_USE_ONNX=1` with `prism-pi-v1` on hub FAQ until a hub artifact passes gates.
+- Use `law_pilot` + ONNX as the primary ingress for customer FX / FAQ / finance chat (that path is for learn/scorecard loops).
 
 **Example:** [`examples/01_hub_web_chat.py`](../examples/01_hub_web_chat.py)
 
@@ -89,10 +90,23 @@ ChorusGraph / agent graph?
 
 **Do**
 - Place guard **before** cache-gated hops.
-- Hub: `block_on={"block"}` (gray continues). Stack: often `{"block","gray"}`.
-- Pick `light` for latency, `heavy` for max coverage.
+- Hub / finance UX: `web_chat` with `use_onnx=False` and `block_on={"block"}` (gray continues).
+- Optional shadow: `light` ONNX observe-only (`would_block` logged; do not enforce until FP gates are green).
+- Stack benches that intentionally accept higher FP: `light` / `heavy` with `block_on` often `{"block","gray"}`.
+- Pair output grounding (PrismShine `finance` or `#12` output scan) — input Guard alone is not enough.
 
-**Examples:** [`chorusgraph_hub_guard.py`](../examples/chorusgraph_hub_guard.py), [`chorusgraph_law_guard.py`](../examples/chorusgraph_law_guard.py)
+**Don’t**
+- Set `PRISMGUARD_USE_ONNX=1` process-wide for hub agents (law artifact FPs on FX).
+- Put `law_pilot` on customer finance ingress.
+- Paste FAQ / policy corpora into the user `message` when ChorusGraph compound routing is enabled — use conversation history or retrieval instead.
+
+### Finance agent pack (ChorusGraph + Shine)
+
+Measured on FinancePackBench smoke (2026-07-22): mis-wiring (`PRISMGUARD_USE_ONNX=1` / `law_pilot` on ingress) → FX `guard_model_first` blocks and collapsed task success; best practice (`web_chat` ONNX off + shadow light + Shine finance) → task/PI 100% on that smoke set (n=5 — illustrative).
+
+Agent rule: **hub UX ≠ scorecard path.** Pick `#1` (+ optional `#7` shadow) for customer finance agents; pick `#2`/`#3`/`#5` only when you intentionally accept higher false-positive risk or are running a security bench.
+
+**Examples:** [`chorusgraph_hub_guard.py`](../examples/chorusgraph_hub_guard.py), [`chorusgraph_law_guard.py`](../examples/chorusgraph_law_guard.py), [`05_shadow_onnx.py`](../examples/05_shadow_onnx.py)
 
 ### #12 Output scan
 
