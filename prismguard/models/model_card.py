@@ -18,6 +18,7 @@ class ModelCard:
     description: str = ""
     calibration_temperature: float = 1.0
     domain: str = ""
+    recommended_profile: str = ""
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> ModelCard:
@@ -31,6 +32,7 @@ class ModelCard:
             description=str(data.get("description", "")),
             calibration_temperature=float(data.get("calibration_temperature", 1.0)),
             domain=str(data.get("domain", "")),
+            recommended_profile=str(data.get("recommended_profile", "")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -47,6 +49,8 @@ class ModelCard:
             payload["calibration_temperature"] = self.calibration_temperature
         if self.domain:
             payload["domain"] = self.domain
+        if self.recommended_profile:
+            payload["recommended_profile"] = self.recommended_profile
         return payload
 
 

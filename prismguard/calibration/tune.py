@@ -141,7 +141,11 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(prog="prismguard-calibrate", description="Holdout-safe threshold tuning")
-    parser.add_argument("--domain", default="law", choices=["law", "healthcare", "finance"])
+    parser.add_argument(
+        "--domain",
+        default="law",
+        help="Any domain slug (bundled or custom). Default: law.",
+    )
     parser.add_argument("--output", type=Path, default=Path("triage.tuned.yaml"))
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)

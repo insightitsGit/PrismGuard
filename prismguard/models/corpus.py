@@ -324,10 +324,25 @@ def default_domain_training_paths(domain: str) -> tuple[list[Path], list[Path]]:
         hub_root = Path("benchmark/hub/training")
         seed_yaml.append(hub_root / "hub_attacks.yaml")
         feedback_jsonl.append(hub_root / "hub_benign_hard_negatives.jsonl")
+    elif key == "healthcare":
+        # Optional starter train pack (not a holdout). Defaults do not guarantee accuracy.
+        hc_train = Path("benchmark/healthcare/training")
+        feedback_jsonl.extend(
+            [
+                hc_train / "healthcare_feedback.jsonl",
+                root / "training_augment.jsonl",
+                root / "benign_hard_negatives.jsonl",
+            ]
+        )
+        for name in ("attacks.yaml", "synthetic_attacks.yaml"):
+            seed_yaml.append(root / name)
     else:
-        # healthcare / finance: overlay already added; optional benchmark data if present
+        # finance / other: overlay already added; optional benchmark data if present
         for name in ("training_augment.jsonl", "benign_hard_negatives.jsonl"):
             feedback_jsonl.append(root / name)
+        # finance (and similar) may also ship training/*.jsonl beside benchmark/<domain>/
+        train_dir = Path("benchmark") / key / "training"
+        feedback_jsonl.append(train_dir / f"{key}_feedback.jsonl")
         for name in ("attacks.yaml", "synthetic_attacks.yaml"):
             seed_yaml.append(root / name)
 
@@ -393,8 +408,14 @@ def subsample_training_examples(
     *,
     max_examples: int,
     seed: int = 42,
+    preserve_source_prefixes: tuple[str, ...] | None = None,
 ) -> list[TrainingExample]:
-    """Stratified subsample for faster dev/CI runs; 0 or negative max_examples keeps all."""
+    """Stratified subsample for faster dev/CI runs; 0 or negative max_examples keeps all.
+
+    When ``preserve_source_prefixes`` is set (e.g. ``(\"finance\", \"feedback\")`` for a
+    domain-pack train), matching rows are always kept so CPU caps cannot drop the
+    domain signal that motivated the retrain.
+    """
     if max_examples <= 0 or len(examples) <= max_examples:
         return examples
     try:
@@ -402,11 +423,47 @@ def subsample_training_examples(
     except ImportError as exc:
         raise RuntimeError("Subsample requires scikit-learn (prismguard[train])") from exc
 
+    prefixes = tuple(p.lower() for p in (preserve_source_prefixes or ()) if p.strip())
+    pinned: list[TrainingExample] = []
+    pool: list[TrainingExample] = []
+    if prefixes:
+        for row in examples:
+            src = (row.source or "").lower()
+            if any(src == p or src.startswith(f"{p}-") or src.startswith(f"{p}+") for p in prefixes):
+                pinned.append(row)
+            else:
+                pool.append(row)
+    else:
+        pool = list(examples)
+
+    if len(pinned) >= max_examples:
+        return _stratified_take(pinned, max_examples=max_examples, seed=seed)
+
+    remaining = max_examples - len(pinned)
+    if remaining <= 0:
+        return pinned
+    if not pool:
+        return pinned
+    if len(pool) <= remaining:
+        return pinned + pool
+    return pinned + _stratified_take(pool, max_examples=remaining, seed=seed)
+
+
+def _stratified_take(
+    examples: list[TrainingExample],
+    *,
+    max_examples: int,
+    seed: int,
+) -> list[TrainingExample]:
+    from sklearn.model_selection import train_test_split
+
+    if max_examples <= 0 or len(examples) <= max_examples:
+        return list(examples)
     texts = [row.text for row in examples]
     labels = [row.label for row in examples]
     if len(set(labels)) < 2:
-        return examples[:max_examples]
-    _, selected_texts, _, selected_labels = train_test_split(
+        return list(examples[:max_examples])
+    _, selected_texts, _, _selected_labels = train_test_split(
         texts,
         labels,
         test_size=max_examples,

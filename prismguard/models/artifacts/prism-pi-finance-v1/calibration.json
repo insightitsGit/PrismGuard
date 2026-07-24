@@ -1,0 +1,7 @@
+{
+  "temperature": 3.0,
+  "domain": "finance",
+  "fitted_at": "2026-07-23T23:06:52.318863+00:00",
+  "holdout_block_rate": 0.25,
+  "normal_allow_rate": 1.0
+}

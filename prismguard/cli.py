@@ -95,8 +95,7 @@ def _build_parser() -> argparse.ArgumentParser:
     import_cmd.add_argument(
         "--domain",
         default=None,
-        choices=["law", "healthcare", "finance"],
-        help="Optional domain pack overlay after import",
+        help="Optional domain slug overlay after import (bundled or custom)",
     )
     import_cmd.add_argument(
         "--force-embed",

@@ -19,7 +19,7 @@ optionally reply **GRADE** for a free one-page gap readout. **No call required.*
 ## One-command install check
 
 ```bash
-pip install "prismguard[prism,guard-model]==0.1.9"
+pip install "prismguard[prism,guard-model]==0.1.10"
 prismguard-model download
 prismguard doctor
 prismguard caps --profile law_pilot

@@ -63,6 +63,28 @@ def test_subsample_training_examples_is_stratified() -> None:
     assert labels == {0, 1}
 
 
+def test_subsample_preserves_domain_source_prefixes() -> None:
+    from prismguard.models.corpus import subsample_training_examples
+
+    pool = [TrainingExample(text=f"pool-{i}", label=i % 2, source="s-labs-train") for i in range(200)]
+    pinned = [
+        TrainingExample(text=f"finance-attack-{i}", label=1, source="finance-train")
+        for i in range(30)
+    ] + [
+        TrainingExample(text=f"finance-benign-{i}", label=0, source="finance-hardneg")
+        for i in range(20)
+    ]
+    sampled = subsample_training_examples(
+        pool + pinned,
+        max_examples=80,
+        preserve_source_prefixes=("finance", "feedback"),
+    )
+    assert len(sampled) == 80
+    finance_texts = {r.text for r in sampled if (r.source or "").startswith("finance")}
+    assert len(finance_texts) == 50
+    assert all(t.startswith("finance-") for t in finance_texts)
+
+
 def test_feedback_export_training_jsonl(tmp_path: Path) -> None:
     storage = create_storage("memory")
     review = FeedbackReviewService(storage)

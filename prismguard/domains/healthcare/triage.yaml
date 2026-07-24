@@ -3,6 +3,8 @@ triage:
   allow_threshold: 0.42
 fusion:
   w_clf: 0.33
+guard_model:
+  artifact_id: prism-pi-healthcare-v1
 categories:
   direct_instruction_override:
     block_threshold: 0.73

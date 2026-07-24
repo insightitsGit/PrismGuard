@@ -100,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--artifact-id", default="prism-pi-v1")
     parser.add_argument("--artifact-path", default="")
     parser.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
-    parser.add_argument("--domain", default="law", choices=["law", "healthcare", "finance"])
+    parser.add_argument("--domain", default="law", help="Domain slug (bundled or custom)")
     args = parser.parse_args(argv)
 
     artifact_dir = (

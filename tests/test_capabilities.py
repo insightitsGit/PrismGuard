@@ -45,10 +45,13 @@ def test_law_pilot_taxonomy_depends_on_prism(monkeypatch) -> None:
     from prismguard.runtime import capabilities as caps_mod
     from prismguard.taxonomy import mapping as mapping_mod
 
+    # Shell may have PRISMGUARD_DOMAIN=finance from local bake-offs — alias must stay law.
+    monkeypatch.setenv("PRISMGUARD_DOMAIN", "finance")
     monkeypatch.setattr(mapping_mod, "has_prismrag", lambda: False)
     caps = caps_mod.guard_capabilities(profile="law_pilot", probe_onnx=False)
     assert caps["prismrag_taxonomy"] is False
     assert "[prism]" in caps["taxonomy_skip_reason"]
+    assert caps["domain_overlay"] == "law"
 
     monkeypatch.setattr(mapping_mod, "has_prismrag", lambda: True)
     monkeypatch.delenv("PRISMGUARD_OFFLINE", raising=False)
@@ -88,7 +91,9 @@ def test_cli_caps_law_pilot_without_onnx_nonzero(monkeypatch) -> None:
     from prismguard.app_cli import cmd_caps
     from prismguard.runtime import capabilities as caps_mod
 
-    monkeypatch.setattr(caps_mod, "_onnx_artifact_ready", lambda: (False, "missing"))
+    monkeypatch.setattr(
+        caps_mod, "_onnx_artifact_ready", lambda **_kwargs: (False, "missing")
+    )
 
     class Args:
         profile = "law_pilot"

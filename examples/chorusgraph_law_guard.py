@@ -3,7 +3,8 @@ Law / scorecard ChorusGraph sketch: guard → (block|gray? END) → retrieve →
 
 Uses ``light`` (hybrid + ONNX) for production/stack latency. Prefer this over
 ``web_chat``. For scorecard / max coverage use ``heavy``; for learn-from-seed /
-taxonomy use ``law_pilot`` + ``prismguard[prism]`` — see docs/integration-guide.md.
+taxonomy use ``domain_pilot`` + ``domain=\"law\"`` + ``prismguard[prism]``
+(``law_pilot`` is a deprecated alias) — see docs/integration-guide.md.
 
 This example does not require ChorusGraph installed — it shows the wiring shape.
 """

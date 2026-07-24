@@ -461,6 +461,7 @@ def train_and_export(
                 description=card.description,
                 calibration_temperature=calibration_temperature,
                 domain=opts.holdout_domain,
+                recommended_profile="domain_pilot",
             ),
         )
 
@@ -564,8 +565,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--domain-pack",
         default="",
-        choices=["", "law", "healthcare", "finance", "general"],
-        help="Opt-in domain overlay + benchmark augment (default: none).",
+        help=(
+            "Opt-in domain slug for overlay/augment + preserve-on-subsample "
+            "(bundled: law|finance|healthcare|general — optional; any custom slug OK). "
+            "Default: none — train from --feedback-jsonl / seed only."
+        ),
     )
     parser.add_argument("--oversample-law", action="store_true", help="Oversample thin attack categories")
     parser.add_argument("--class-weighted", action="store_true", help="Balanced class weights in loss")
@@ -573,9 +577,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--holdout-early-stop", action="store_true", help="Checkpoint best holdout epoch")
     parser.add_argument(
         "--holdout-domain",
-        default="law",
-        choices=["law", "healthcare", "finance", "general"],
-        help="Holdout domain for early-stop / eval (default: law).",
+        default="",
+        help=(
+            "Domain slug for early-stop / eval / model_card "
+            "(default: --domain-pack if set, else 'law'). Any custom slug OK."
+        ),
     )
     parser.add_argument(
         "--normal-txt",
@@ -591,9 +597,17 @@ def main(argv: list[str] | None = None) -> int:
     seed_yaml_paths = [Path(p) for p in args.seed_yaml]
     domain_pack = (args.domain_pack or "").strip() or ("law" if args.law_pack else "")
     if domain_pack:
+        from prismguard.domains.registry import normalize_domain_slug
+
+        domain_pack = normalize_domain_slug(domain_pack)
         d_seed, d_feedback = default_domain_training_paths(domain_pack)
         seed_yaml_paths.extend(d_seed)
         feedback_paths.extend(d_feedback)
+    holdout_domain = (args.holdout_domain or "").strip() or domain_pack or "law"
+    if holdout_domain:
+        from prismguard.domains.registry import normalize_domain_slug
+
+        holdout_domain = normalize_domain_slug(holdout_domain)
 
     examples, manifest = load_corpus_for_training(
         profile=args.profile,  # type: ignore[arg-type]
@@ -607,15 +621,40 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("Training corpus is empty — import seed or pass --feedback-jsonl")
 
     if args.max_train_examples > 0:
-        examples = subsample_training_examples(examples, max_examples=args.max_train_examples)
+        # Domain / feedback rows must survive CPU caps — otherwise finance (etc.)
+        # signal is stratified away and the artifact is not domain-calibrated.
+        preserve: tuple[str, ...] = ()
+        if domain_pack:
+            preserve = (domain_pack, "feedback")
+        elif feedback_paths:
+            preserve = ("feedback",)
+        examples = subsample_training_examples(
+            examples,
+            max_examples=args.max_train_examples,
+            preserve_source_prefixes=preserve or None,
+        )
         manifest = corpus_manifest(examples, profile=str(args.profile))
-        print(f"Subsampled to {len(examples)} examples for this run")
+        pinned_n = sum(
+            1
+            for e in examples
+            if preserve
+            and any(
+                (e.source or "").lower() == p
+                or (e.source or "").lower().startswith(f"{p}-")
+                or (e.source or "").lower().startswith(f"{p}+")
+                for p in preserve
+            )
+        )
+        print(
+            f"Subsampled to {len(examples)} examples for this run"
+            + (f" (preserved {pinned_n} domain/feedback rows)" if preserve else "")
+        )
 
     options = TrainOptions(
         class_weighted=args.class_weighted,
         focal_loss=args.focal_loss,
         holdout_early_stop=args.holdout_early_stop,
-        holdout_domain=args.holdout_domain,
+        holdout_domain=holdout_domain,
         fit_calibration=not args.no_calibration,
         normal_txt=Path(args.normal_txt) if getattr(args, "normal_txt", "") else None,
         normal_yaml=Path(args.normal_yaml) if getattr(args, "normal_yaml", "") else None,
@@ -636,6 +675,39 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"Trained and exported artifact to {artifact_dir}")
     print(f"Corpus fingerprint: {manifest.fingerprint} ({manifest.total_examples} examples)")
+    domain_hint = domain_pack or holdout_domain or ""
+    if domain_hint:
+        # Keep model_card recommendation even when calibration temperature is 1.0.
+        try:
+            from prismguard.models.model_card import ModelCard, load_model_card, write_model_card
+
+            card = load_model_card(artifact_dir)
+            write_model_card(
+                artifact_dir,
+                ModelCard(
+                    model_id=card.model_id,
+                    version=card.version,
+                    architecture=card.architecture,
+                    max_length=card.max_length,
+                    injection_label=card.injection_label,
+                    base_model=card.base_model,
+                    description=card.description,
+                    calibration_temperature=card.calibration_temperature,
+                    domain=domain_hint,
+                    recommended_profile="domain_pilot",
+                ),
+            )
+        except Exception as exc:  # pragma: no cover
+            print(f"Warning: could not update model_card recommended_profile: {exc}")
+        print("")
+        print("Next (canonical learn / PI path — do NOT invent finance_pilot):")
+        print(f"  export PRISMGUARD_DOMAIN={domain_hint}")
+        print(f"  export PRISMGUARD_ARTIFACT_ID={args.artifact_id}")
+        print("  export PRISMGUARD_USE_ONNX=1")
+        print(
+            f'  create_checker_for_app("domain_pilot", domain="{domain_hint}", use_onnx=True)'
+        )
+        print("  # law_pilot is a deprecated alias for domain_pilot + domain=law only")
     return 0
 
 

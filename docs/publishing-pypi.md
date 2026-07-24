@@ -68,20 +68,48 @@ Expected: wheel **under 100 MB**, `model.onnx in wheel 0`, `cli_check True`, `be
 ```powershell
 $env:TWINE_USERNAME = "__token__"
 $env:TWINE_PASSWORD = "pypi-YOUR_TOKEN_HERE"
-twine upload dist/prismguard-0.1.9-py3-none-any.whl
-twine upload dist/prismguard-0.1.9.tar.gz
+twine upload dist/prismguard-0.1.10-py3-none-any.whl
+twine upload dist/prismguard-0.1.10.tar.gz
 ```
 
 Upload the **wheel first**; it is smaller and validates packaging.
 
-## What ships in 0.1.9
+## What ships in 0.1.10
 
 | Item | Included |
 |------|----------|
-| Windows-safe `prismguard caps` (ASCII CLI) | yes — fix over 0.1.8 |
-| Everything from 0.1.8 | yes |
+| `domain_pilot` (any domain) + deprecated `law_pilot` alias | yes |
+| Train-first → then pilot docs / train CLI | yes |
+| Optional finance starter download URL (`v0.1.10` Release asset) | yes (upload ONNX separately) |
+| Finance structural PI + corpus preserve for domain train | yes |
+| Caps non-zero exit when learn/scorecard path missing ONNX | yes |
+| Prior 0.1.8–0.1.9 (light/heavy, Windows caps ASCII) | yes |
+| ONNX `model.onnx` weights in wheel | **no** — law reuses `v0.1.2`; finance/healthcare via Release |
 
-See [`RELEASE_NOTES_0.1.9.md`](RELEASE_NOTES_0.1.9.md).
+See [`RELEASE_NOTES_0.1.10.md`](RELEASE_NOTES_0.1.10.md).
+
+## GitHub Release assets (before or with PyPI)
+
+```powershell
+# After git tag v0.1.10 (push only when approved):
+gh release create v0.1.10 `
+  prismguard/models/artifacts/prism-pi-finance-v1/model.onnx `
+  --repo insightitsGit/PrismGuard `
+  --title "v0.1.10" `
+  --notes-file docs/RELEASE_NOTES_0.1.10.md
+
+# Rename asset on upload if needed to: prism-pi-finance-v1-model.onnx
+# (artifact_fetch URL expects that exact name)
+```
+
+Upload both finance and healthcare ONNX assets (rename to `*-model.onnx` to match `artifact_fetch.py` URLs):
+
+```powershell
+gh release upload v0.1.10 `
+  "prismguard/models/artifacts/prism-pi-finance-v1/model.onnx#prism-pi-finance-v1-model.onnx" `
+  "prismguard/models/artifacts/prism-pi-healthcare-v1/model.onnx#prism-pi-healthcare-v1-model.onnx" `
+  --repo insightitsGit/PrismGuard
+```
 
 ## What shipped in 0.1.8
 
@@ -99,15 +127,15 @@ See [`RELEASE_NOTES_0.1.8.md`](RELEASE_NOTES_0.1.8.md).
 
 ## Post-publish
 
-1. Confirm package live: `pip install "prismguard==0.1.9"` then `prismguard caps --profile light`.
-2. Confirm with extras: `pip install "prismguard[guard-model]==0.1.9" && prismguard-model download`
+1. Confirm package live: `pip install "prismguard==0.1.10"` then `prismguard caps --profile light`.
+2. Confirm with extras: `pip install "prismguard[guard-model]==0.1.10" && prismguard-model download`
 3. Confirm: `python -c "from prismguard.runtime.factory import create_checker_for_app; create_checker_for_app('light')"`
-4. Tag: `git tag v0.1.9 && git push origin v0.1.9` (only after you approve push)
+4. Tag: `git tag v0.1.10 && git push origin v0.1.10` (only after you approve push)
 
 ## Customer install
 
 ```bash
-pip install "prismguard[guard-model]==0.1.9"
+pip install "prismguard[guard-model]==0.1.10"
 prismguard-model download
 prismguard caps --profile light
 prismguard eval self-check

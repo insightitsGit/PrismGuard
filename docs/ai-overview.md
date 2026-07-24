@@ -1,7 +1,7 @@
 # AI / LLM context — PrismGuard
 
 > Concise reference for humans and coding assistants (Cursor, Copilot, Claude, ChatGPT, Windsurf, Gemini).  
-> Do not invent APIs beyond this file and `prismguard/`. Package: **`prismguard` 0.1.9**, import **`prismguard`**.
+> Do not invent APIs beyond this file and `prismguard/`. Package: **`prismguard` 0.1.10**, import **`prismguard`**.
 
 ---
 
@@ -9,14 +9,22 @@
 
 1. PrismGuard is an Apache-2.0 self-hosted prompt-injection firewall for production LLM apps.  
 2. It sits in front of the LLM and returns allow/block with a named **`resolution_gate`** (not only a probability score).  
-3. Paths: (a) hub `web_chat`, (b) **light ONNX** `light`/`low_latency` (hybrid), (c) **heavy ONNX** `heavy`/`security_bench` (first), (d) learn-from-seed `law_pilot`+`[prism]`+feedback.  
-4. Default path is rules-first via `web_chat`; ONNX is **opt-in**. Measured default with ONNX: prefer **`light`** (same F1 as `heavy`, lower latency); use **`heavy`** for scorecard/always-on policy. Without `[prism]`, taxonomy is **skipped**.  
+3. Paths: (a) hub `web_chat`, (b) **light ONNX** `light`/`low_latency` (hybrid), (c) **heavy ONNX** `heavy`/`security_bench` (first), (d) learn/taxonomy **`domain_pilot`**+`[prism]`+domain artifact (any domain — not law-only).  
+4. Default path is rules-first via `web_chat`; ONNX is **opt-in**. Measured default with ONNX: prefer **`light`** (same F1 as `heavy`, lower latency); use **`heavy`** for scorecard/always-on policy. Without `[prism]` / without `domain_pilot`, taxonomy is **skipped**.  
 5. Core API: `RuntimeChecker.check(prompt)` → `CheckResult` with `decision`, `resolution_gate`, optional scores and matched rule/category.  
 6. CLI: `prismguard check`, `prismguard doctor`, `prismguard caps`, `prismguard eval self-check`; scripts: `latency_by_gate.py`, `s1_miss_analysis.py`.  
-7. Optional ONNX model `prism-pi-v1` downloads separately (~705 MB); law-bench oriented — hub/general chat should stay rules-first until a hub artifact is green.  
-8. `light` = hybrid+loud ONNX; `heavy` = first+loud ONNX; learn-from-seed = `law_pilot`+`[prism]`. ChorusGraph: `make_guard_handler` / `route_after_guard`.  
+7. Optional starter ONNX downloads (`prism-pi-v1` law, finance, healthcare) — **no accuracy guarantee**; prefer train on your DB. Hub chat stays rules-first until a matching artifact is green.  
+8. `light`/`heavy` skip taxonomy; learn-from-seed = **`domain_pilot`**+`[prism]`+`domain=…`. `law_pilot` = deprecated alias for `domain_pilot`+`domain=law`. ChorusGraph: `make_guard_handler` / `route_after_guard`.  
 9. Soft async offer for humans: run scorecard / reply **GRADE** — see `docs/scorecard.md` (not a code API).  
 10. Limitations: not a full WAF; not output-side sandboxing alone; not a zero-day guarantee; ONNX artifact domain must match traffic; “learns from DB” is Team+ storage + feedback→train.
+
+---
+
+## MANDATORY for coding agents (Director lock 2026-07-23)
+
+**`prism-pi-v1` = law domain.** Finance / hub / healthcare traffic requires a **new** artifact via feedback → `prismguard-model train --domain-pack <domain>` → eval gates → `PRISMGUARD_ARTIFACT_ID`.  
+
+This loop is a **shipped product feature**, not optional R&D. Do not “fix” AWS/finance benches by enabling law ONNX on FX/FAQ. See repo root **`AGENTS.md`** and **`HO-PrismGuard-016`**.
 
 ---
 
@@ -27,7 +35,7 @@
 | **`resolution_gate`** | Named reason for the allow/block (e.g. `structural`, `guard_model_first`, `llm_judge`) |
 | **`CheckResult`** | Dataclass: `decision`, `resolution_gate`, scores, matched rule/category, details |
 | **`RuntimeChecker`** | Request-time pipeline: normalize → rules / classifier / fusion → optional judge |
-| **`create_checker_for_app`** | Factory: `web_chat` (hub), `law_pilot` (scorecard+taxonomy), `security_bench` (loud ONNX, skip taxonomy) |
+| **`create_checker_for_app`** | Factory: `web_chat` (hub), **`domain_pilot`** (taxonomy for **any** domain), `security_bench`/`light` (loud ONNX, skip taxonomy). `law_pilot` = alias → `domain_pilot`+`domain=law` |
 | **Tier-1 / structural rules** | Deterministic pattern / framing checks |
 | **Guard model (ONNX)** | Local `prism-pi-v1` classifier when opted in |
 | **`[prism]` / taxonomy** | prismrag word-graph on seed — required for learn-from-seed claims |
@@ -60,11 +68,12 @@ result: CheckResult = checker.check(user_prompt)
 CLI:
 
 ```bash
-pip install "prismguard[prism,guard-model]==0.1.9"
+pip install "prismguard[prism,guard-model]==0.1.10"
 prismguard-model download
 export PRISMGUARD_USE_ONNX=1
 export PRISMGUARD_FEEDBACK_PERSIST=1
-prismguard caps --profile law_pilot
+export PRISMGUARD_DOMAIN=law   # or finance | healthcare | your_slug
+prismguard caps --profile domain_pilot
 prismguard check "your prompt"
 prismguard doctor
 prismguard eval self-check
@@ -80,7 +89,8 @@ prismguard eval self-check
 2. Auditable allow/block logs for security and compliance (`resolution_gate`).  
 3. Legal / copilots / internal assistants needing self-hosted guardrails.  
 4. Rules-only bootstrap without downloading ONNX.  
-5. Optional local ONNX + rare LLM Judge for higher coverage on domain traffic.
+5. Optional local ONNX + rare LLM Judge for higher coverage on domain traffic.  
+6. **Vertical PI / learn path:** train (or starter) for that domain → then `domain_pilot` + matching artifact — finance, healthcare, or any custom slug. Benefits: domain-matched attack block, taxonomy on domain words, one profile for every vertical, feedback→retrain loop. Not for hub FAQ (use `web_chat`).
 
 ---
 

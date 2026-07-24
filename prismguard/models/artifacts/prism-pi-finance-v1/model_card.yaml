@@ -1,0 +1,7 @@
+model_id: prism-pi-finance-v1
+version: '1'
+architecture: sequence_classification
+max_length: 256
+injection_label: 1
+base_model: C:\code\PrismGaurd\prismguard\models\artifacts\prism-pi-finance-v1-hf
+description: Seed-trained prism-pi-finance-v1; eval accuracy=0.8616666666666667, f1_injection=0.8471454880294659

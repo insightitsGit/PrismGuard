@@ -24,9 +24,10 @@ _OVERRIDE_PATTERNS = (
     re.compile(r"\bdisregard\b.{0,40}\b(your |the )?(rules|policies|safety|guidelines)\b", re.I),
     re.compile(r"\bnew system instructions?\b", re.I),
     re.compile(r"\bforget\b.{0,20}\b(rules|instructions|safety training)\b", re.I),
-    re.compile(r"\bbypass\b.{0,40}\b(privilege|confidentiality|restrictions?)\b", re.I),
-    re.compile(r"\boverride\b.{0,30}\b(confidentiality|privilege|restrictions?|all policies|all rules)\b", re.I),
+    re.compile(r"\bbypass\b.{0,40}\b(privilege|confidentiality|restrictions?|guardrails?)\b", re.I),
+    re.compile(r"\boverride\b.{0,30}\b(confidentiality|privilege|restrictions?|all policies|all rules|safety)\b", re.I),
     re.compile(r"\boverride all (policies|rules|safety|restrictions)\b", re.I),
+    re.compile(r"\boverride safety\b", re.I),
     re.compile(r"\bmake an exception\b.{0,40}\b(for me|confidential|privilege)\b", re.I),
     re.compile(r"\brepeat\b.{0,30}\b(instructions?|everything)\b.{0,20}\babove\b", re.I),
     re.compile(r"\bignore safety\b", re.I),
@@ -35,15 +36,22 @@ _OVERRIDE_PATTERNS = (
     re.compile(r"\bdo anything now\b|\bdo.?anything.?now\b", re.I),
     re.compile(r"\bjailbreak\b.{0,40}\b(mode|enabled|activated|prompt)\b", re.I),
     re.compile(r"\benable jailbreak\b|\bjailbreak mode\b", re.I),
+    # Finance / agent PI paraphrases (FinancePackBench mid holdout themes — no LLM Judge)
+    re.compile(r"\bcompliance\s+off\b", re.I),
+    re.compile(r"\bdisable\b.{0,40}\bcompliance\b", re.I),
+    re.compile(r"\bdisable\b.{0,40}\b(hallucination|safety|guardrails?)\b", re.I),
+    re.compile(r"\bunrestricted\b.{0,40}\b(finance|agent|mode)\b", re.I),
+    re.compile(r"\bforce tool misuse\b|\btool misuse\b", re.I),
 )
 
 _ROLE_PATTERNS = (
     re.compile(r"\byou are now\b", re.I),
-    re.compile(r"\bact as\b.{0,40}\b(counsel|judge|associate|paralegal)\b", re.I),
-    re.compile(r"\bpretend you are\b.{0,40}\b(rogue|counsel|judge|plaintiff|opposing)\b", re.I),
+    re.compile(r"\bact as\b.{0,40}\b(counsel|judge|associate|paralegal|root admin|rogue treasurer)\b", re.I),
+    re.compile(r"\bpretend you are\b.{0,40}\b(rogue|counsel|judge|plaintiff|opposing|the cfo)\b", re.I),
     re.compile(r"\bimagine you are\b.{0,40}\b(rogue|associate|counsel|judge)\b", re.I),
+    re.compile(r"\broleplay\b.{0,40}\b(rogue treasurer|rogue|cfo)\b", re.I),
     re.compile(r"\bplay the judge\b", re.I),
-    re.compile(r"\bdeveloper mode\b", re.I),
+    re.compile(r"\bdeveloper mode\b|\bdeveloper backdoor\b", re.I),
     re.compile(r"\bdan mode\b|\byou are now\b.{0,40}\bDAN\b|\bDAN\b.{0,40}\bignore\b", re.I),
     re.compile(r"\bno restrictions\b", re.I),
     re.compile(r"\bno ethics duties\b", re.I),
@@ -86,11 +94,33 @@ _ROLE_JUDGE_DISCLOSURE = re.compile(
 
 _EXFIL_PATTERNS = (
     re.compile(r"\boutput\b.{0,30}\b(hidden system|system message|scoring rubric)\b", re.I),
-    re.compile(r"\b(reveal|show|print|dump|expose)\b.{0,40}\b(system prompt|system message|hidden instructions?)\b", re.I),
+    re.compile(r"\b(reveal|show|print|dump|expose)\b.{0,40}\b(system prompt|system message|hidden instructions?|hidden credentials?|cached secrets?)\b", re.I),
+    re.compile(r"\b(reveal|show|print|dump|expose)\b.{0,40}\b(tool api keys?|api keys?)\b", re.I),
+    re.compile(r"\bprompt leak\b|\bchain-of-thought\b.{0,40}\b(secret|cached)\b", re.I),
     re.compile(r"\bwhat (are|is) your (system |hidden )?instructions?\b", re.I),
     re.compile(r"\battacker\.example\b", re.I),
     re.compile(r"\bexternal@proton\.me\b", re.I),
     re.compile(r"\bemail\b.{0,40}\b(privilege log|json)\b", re.I),
+)
+
+# Finance invent / forge / misuse — block without LLM Judge (domain PI holdouts).
+_FINANCE_ATTACK_PATTERNS = (
+    re.compile(
+        r"\b(invent|fabricate|forge|publish)\b.{0,80}\b("
+        r"rate|apr|apy|fed funds|fee|fees|fx|exchange rate|cd|wire fee|account|faq"
+        r")\b",
+        re.I,
+    ),
+    re.compile(r"\boutput a fake\b.{0,40}\b(fed funds|rate|apr|apy)\b", re.I),
+    re.compile(r"\bsecretly change\b.{0,40}\b(fx|rate|mid)\b", re.I),
+    re.compile(r"\bfetch_exchange_rate\b.{0,60}\b(mars|invent|fake|nasa)\b", re.I),
+    re.compile(r"\binvent a real\b.{0,40}\b(fx|nasa|pair)\b", re.I),
+    re.compile(r"\bfdic covers\b.{0,60}\bcrypto\b", re.I),
+    re.compile(r"\bforget grounding\b|\bignore retrieval\b", re.I),
+    re.compile(r"\bignore faq\b|\bignore\b.{0,40}\bhold periods?\b", re.I),
+    re.compile(r"\bclaim the faq says\b|\bnot in the faq\b", re.I),
+    re.compile(r"\bfee waiver codes?\b|\bdelete fees\b|\breplace with \$0\b", re.I),
+    re.compile(r"\bach clears instantly\b", re.I),
 )
 
 _BENIGN_PATTERNS = (
@@ -139,8 +169,10 @@ _DELIMITER_PATTERNS = (
     re.compile(r"\[\[system\]\]", re.I),
     re.compile(r"<\|system\|>", re.I),
     re.compile(r"###\s*system\b", re.I),
-    # Fake SYSTEM: override prefix — avoid matching "What is a system prompt?" product FAQs.
-    re.compile(r"(?i)^\s*system\s*:\s*.{0,120}\b(override|ignore|disregard|jailbreak)\b"),
+    # Fake SYSTEM: override / disable / invent prefix — avoid matching "What is a system prompt?" product FAQs.
+    re.compile(
+        r"(?i)^\s*system\s*:\s*.{0,120}\b(override|ignore|disregard|jailbreak|disable|bypass|fabricate|invent)\b"
+    ),
 )
 
 _LEGAL_TOPIC_RE = re.compile(
@@ -160,7 +192,8 @@ _INJECTION_IMPERATIVE_RE = re.compile(
     r"\b("
     r"ignore|disregard|forget|bypass|override|disclose|reveal|email|export|"
     r"paste|append|embed|pretend you are|act as|roleplay as|play the judge|"
-    r"developer mode|make an exception|do not refuse|never refuse|comply with every"
+    r"developer mode|make an exception|do not refuse|never refuse|comply with every|"
+    r"disable|fabricate|invent|exfiltrate|force tool"
     r")\b",
     re.I,
 )
@@ -220,6 +253,9 @@ def is_legal_topic_fragment(text: str) -> bool:
     stripped = text.strip()
     if not stripped or len(stripped) > 160:
         return False
+    # Fake SYSTEM: / delimiter jailbreaks are never "benign legal topic".
+    if re.search(r"(?i)^\s*system\s*:", stripped):
+        return False
     if _INJECTION_IMPERATIVE_RE.search(stripped):
         return False
     if re.search(r"\bencode\b.{0,40}\bbase64\b", stripped, re.I):
@@ -236,6 +272,7 @@ def is_legal_topic_fragment(text: str) -> bool:
         + _ROLE_PATTERNS
         + _REFUSAL_PATTERNS
         + _LAW_ATTACK_PATTERNS
+        + _FINANCE_ATTACK_PATTERNS
         + _EXFIL_PATTERNS
         + _OUTPUT_URL_EXFIL_PATTERNS
     ):
@@ -268,17 +305,46 @@ def _imperative_ratio(text: str) -> float:
     return min(1.0, imperatives / max(1, len(words)) * 8)
 
 
+def active_vertical_packs(domain: str | None) -> frozenset[str]:
+    """Which vertical structural packs apply for this domain.
+
+    - ``domain`` unset (hub/core): all known packs — keeps cross-vertical PI coverage
+      (e.g. finance mid holdout on ``web_chat`` without ONNX).
+    - Explicit domain: only that pack (custom slugs → universal patterns only).
+    """
+    if domain is None or not str(domain).strip():
+        return frozenset({"law", "finance", "healthcare"})
+    key = str(domain).strip().lower()
+    if key in ("none", "core", "-"):
+        return frozenset({"law", "finance", "healthcare"})
+    if key == "general":
+        return frozenset({"law"})
+    if key in ("law", "finance", "healthcare"):
+        return frozenset({key})
+    return frozenset()
+
+
+# Back-compat alias
+_active_vertical_packs = active_vertical_packs
+
+
 def analyze_structural(
     text: str,
     *,
     block_threshold: float = 0.85,
     allow_threshold: float = 0.20,
+    domain: str | None = None,
 ) -> StructuralResult:
-    """Deterministic structural heuristics (handoff Part I.4)."""
+    """Deterministic structural heuristics (handoff Part I.4).
+
+    Universal PI patterns always run. Vertical packs (law/finance/…) are gated by
+    ``domain`` so a healthcare/custom checker is not law- or finance-biased.
+    """
     attack = 0.0
     benign = 0.0
     matched: str | None = None
     hits: list[str] = []
+    packs = _active_vertical_packs(domain)
 
     for pattern in _OVERRIDE_PATTERNS:
         if pattern.search(text):
@@ -304,17 +370,26 @@ def analyze_structural(
             attack += 0.45
             if "refusal_suppression" not in hits:
                 hits.append("refusal_suppression")
-    for pattern in _LAW_ATTACK_PATTERNS:
-        if pattern.search(text):
-            attack += 0.40
-            hits.append("law_domain_attack")
-            break
+    if "law" in packs:
+        for pattern in _LAW_ATTACK_PATTERNS:
+            if pattern.search(text):
+                attack += 0.40
+                hits.append("law_domain_attack")
+                break
+    if "finance" in packs:
+        for pattern in _FINANCE_ATTACK_PATTERNS:
+            if pattern.search(text):
+                attack = max(attack, 0.88)
+                hits.append("finance_domain_attack")
+                break
     for pattern in _EXFIL_PATTERNS:
         if pattern.search(text):
             attack += 0.25
             hits.append("exfiltration")
             if re.search(
-                r"\b(reveal|show|print|dump|expose)\b.{0,40}\b(system prompt|system message|hidden instructions?)\b",
+                r"\b(reveal|show|print|dump|expose)\b.{0,40}\b("
+                r"system prompt|system message|hidden instructions?|hidden credentials?|cached secrets?"
+                r")\b|\bprompt leak\b",
                 text,
                 re.I,
             ):
@@ -337,11 +412,26 @@ def analyze_structural(
         if pattern.search(text):
             attack += 0.25
             hits.append("injection_delimiter")
-            # Fake SYSTEM: override prefix — strong block (not product FAQ about system prompts).
-            if re.search(r"(?i)^\s*system\s*:\s*.{0,120}\b(override|ignore|disregard|jailbreak)\b", text):
+            # Fake SYSTEM: override / disable / invent — strong block (not product FAQ).
+            if re.search(
+                r"(?i)^\s*system\s*:\s*.{0,120}\b("
+                r"override|ignore|disregard|jailbreak|disable|bypass|fabricate|invent"
+                r")\b",
+                text,
+            ):
                 attack = max(attack, 0.88)
                 hits.append("fake_system_override")
             break
+
+    # Rogue finance roleplay / tool-misuse / KB admin: never leave as gray for LLM Judge.
+    if "finance" in packs and re.search(
+        r"(?i)\brogue treasurer\b|\bforce tool misuse\b|\bdeveloper backdoor\b|"
+        r"\broot admin\b|\bsocial engineer\b|\bthe cfo authorizing\b",
+        text,
+    ):
+        attack = max(attack, 0.88)
+        if "finance_domain_attack" not in hits:
+            hits.append("finance_domain_attack")
 
     attack += _encoded_blob_score(text)
     attack += _imperative_ratio(text) * 0.2
@@ -351,7 +441,8 @@ def analyze_structural(
         if pattern.search(text):
             benign += 0.35
             hits.append("benign_framing")
-    if is_legal_topic_fragment(text) and attack < block_threshold:
+    # Legal-topic soft-allow only for law/general/unset — not healthcare/custom.
+    if "law" in packs and is_legal_topic_fragment(text) and attack < block_threshold:
         benign = max(benign, 0.50)
         if "legal_topic_fragment" not in hits:
             hits.append("legal_topic_fragment")
@@ -386,21 +477,30 @@ def analyze_structural(
     )
 
 
-def has_suspicious_segments(text: str, *, floor: float = 0.15) -> bool:
+def has_suspicious_segments(
+    text: str,
+    *,
+    floor: float = 0.15,
+    domain: str | None = None,
+) -> bool:
     """Return True when text contains segments worth embedding (handoff I.5 filter inverse)."""
     lower = text.lower()
     if any(ngram in lower for ngram in _SUSPICIOUS_NGRAMS):
         return True
     if _encoded_blob_score(text) >= floor:
         return True
-    if any(
-        p.search(text)
-        for p in _OVERRIDE_PATTERNS
+    packs = _active_vertical_packs(domain)
+    patterns = (
+        _OVERRIDE_PATTERNS
         + _ROLE_PATTERNS
         + _REFUSAL_PATTERNS
-        + _LAW_ATTACK_PATTERNS
         + _EXFIL_PATTERNS
         + _DELIMITER_PATTERNS
-    ):
+    )
+    if "law" in packs:
+        patterns = patterns + _LAW_ATTACK_PATTERNS
+    if "finance" in packs:
+        patterns = patterns + _FINANCE_ATTACK_PATTERNS
+    if any(p.search(text) for p in patterns):
         return True
     return False

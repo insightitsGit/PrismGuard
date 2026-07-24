@@ -13,7 +13,8 @@ from prismguard.config.loader import GuardModelConfig, load_triage_config
 from prismguard.models.loader import load_corpus_manifest
 from prismguard.runtime.guard_model import GuardModel, create_guard_model
 
-DomainName = Literal["law", "healthcare", "finance", "general"]
+# Bundled shortcuts — any custom domain slug is also accepted at runtime.
+DomainName = str
 DOMAIN_CHOICES = ("law", "healthcare", "finance", "general")
 
 
@@ -223,7 +224,14 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="Classifier-only holdout evaluation")
-    parser.add_argument("--domain", default="law", choices=list(DOMAIN_CHOICES))
+    parser.add_argument(
+        "--domain",
+        default="law",
+        help=(
+            "Any domain slug (bundled: law|healthcare|finance|general, or custom). "
+            f"Hints: {', '.join(DOMAIN_CHOICES)}"
+        ),
+    )
     parser.add_argument("--artifact-id", default="")
     parser.add_argument("--artifact-path", default="")
     parser.add_argument(

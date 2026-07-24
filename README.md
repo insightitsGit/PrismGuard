@@ -17,7 +17,7 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 
 ✅ Self-hosted &nbsp;·&nbsp; ✅ Explainable decisions &nbsp;·&nbsp; ✅ ONNX local inference &nbsp;·&nbsp; ✅ Optional LLM Judge &nbsp;·&nbsp; ✅ Built for production
 
-[Pick features](#pick-your-features) · [Examples](examples/README.md) · [Best practices](docs/best-practices.md) · [Quick install](#install) · [Live demo](docs/demo.html) · [**Guardrail Scorecard**](docs/scorecard.md) · [Learn loop](#learn-from-seed--words--db) · [PyPI](https://pypi.org/project/prismguard/0.1.9/) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
+[Pick features](#pick-your-features) · [PrismRAG taxonomy](#prismrag-taxonomy--optional-not-mandatory) · [Examples](examples/README.md) · [Best practices](docs/best-practices.md) · [Quick install](#install) · [Live demo](docs/demo.html) · [**Guardrail Scorecard**](docs/scorecard.md) · [Learn loop](#learn-from-seed--words--db) · [PyPI](https://pypi.org/project/prismguard/0.1.10/) · [Benchmarks](#benchmarks-law-domain) · [Enterprise](docs/enterprise-product-model.md)
 
 ### Designed for
 
@@ -27,9 +27,132 @@ PrismGuard is an open-source prompt injection firewall for production AI systems
 
 ## What is this?
 
-PrismGuard (`prismguard` 0.1.9) is a **self-hosted prompt-injection firewall**. It classifies each user prompt **before** it reaches your LLM and returns an auditable **`resolution_gate`** — not only a probability score.
+PrismGuard (`prismguard` 0.1.10) is a **self-hosted prompt-injection firewall**. It classifies each user prompt **before** it reaches your LLM and returns an auditable **`resolution_gate`** — not only a probability score.
 
 Features are **opt-in layers**. A hub install is not a scorecard install; light ONNX is not heavy ONNX; neither enables learn-from-seed taxonomy. **Pick each layer you need** (table below), then verify with `prismguard caps`.
+
+### Order: **train the model first**, then use `domain_pilot`
+
+> **Do not start with `domain_pilot` alone.** Taxonomy + ONNX only help after you have a **domain-matched** artifact.
+
+```text
+1. TRAIN (or download a starter) for that domain
+      → prismguard-model train … --artifact-id prism-pi-<domain>-v1
+      → or: prismguard-model download --domain law|finance|healthcare  (starter; no accuracy guarantee)
+2. POINT env at that artifact
+      → PRISMGUARD_ARTIFACT_ID=prism-pi-<domain>-v1
+      → PRISMGUARD_DOMAIN=<domain>
+      → PRISMGUARD_USE_ONNX=1
+3. THEN run domain_pilot  (taxonomy + that model together)
+      → create_checker_for_app("domain_pilot", domain="<domain>", use_onnx=True)
+```
+
+| Step | What | Why |
+|------|------|-----|
+| **1. Train / download** | Build or fetch `prism-pi-<domain>-v1` | Weights must match the vertical (law ≠ finance) |
+| **2. Wire env** | Artifact id + domain | So ONNX is not the wrong default (`prism-pi-v1` law) |
+| **3. `domain_pilot`** | Taxonomy + overlay + ONNX | Word-graph learns domain language; classifier uses **your** weights |
+
+**What `domain_pilot` is:** the profile that turns on PrismRAG taxonomy for **any** domain (not law-only) and loads the artifact you pointed at.  
+**What it is not:** a substitute for training. Skipping step 1 and using law weights on finance is a false win.
+
+- **`law_pilot` is deprecated** — alias for `domain_pilot` + `domain="law"` only. Never use it for finance. Never invent `finance_pilot`.  
+- `web_chat` / `light` / `heavy` **skip** taxonomy — they are not this path.  
+- Verify after step 3: `prismguard caps --profile domain_pilot` → `prismrag_taxonomy: True` and correct `domain_overlay`.
+
+```python
+# AFTER train (or starter download) + env pointed at the artifact:
+create_checker_for_app("domain_pilot", domain="finance", use_onnx=True)
+create_checker_for_app("domain_pilot", domain="acme_claims", use_onnx=True)
+
+# Law compat only:
+create_checker_for_app("law_pilot", use_onnx=True)  # == domain_pilot + domain="law"
+```
+
+#### Use cases (when this path is right)
+
+| Use case | Why train → `domain_pilot` |
+|----------|----------------------------|
+| **Vertical PI bake-off** (finance, healthcare, claims, support) | Attack language is domain-specific; law ONNX alone misses or overblocks |
+| **Agent / RAG copilots on real traffic** | Soft paraphrases and “help me with wire transfer…” style prompts need weights + taxonomy tuned to that corpus |
+| **Learn-from-seed / feedback loop** | Export misses → retrain → redeploy the same `domain_pilot` profile with a new artifact |
+| **Any custom slug** (`acme_claims`, `hr_bot`, …) | One profile for every vertical — only `domain=` and artifact change |
+| **Not this path** | Public FAQ / hub UX with low FP → use `web_chat`. Pure latency ONNX without learn → `light` / `heavy` |
+
+#### Benefits
+
+| Benefit | What you get |
+|---------|----------------|
+| **Higher PI block on that vertical** | Domain-matched ONNX + PrismRAG word-graph (measured finance mid: 100% PI attack on this path) |
+| **Fewer false “universal model” wins** | You stop forcing law weights onto finance/healthcare prompts |
+| **Taxonomy that learns domain words** | `[prism]` graph turns on only under `domain_pilot` — not under `light`/`heavy`/`web_chat` |
+| **One API for every domain** | Always `domain_pilot` + `domain=<slug>`; no `finance_pilot` / `healthcare_pilot` sprawl |
+| **Closed improvement loop** | Feedback persist → retrain → same pilot profile; accuracy compounds on *your* traffic |
+| **Honest gates** | Holdout attack block + benign allow before you claim scorecard numbers |
+
+**Bottom line:** train so the classifier knows the vertical; `domain_pilot` so taxonomy and that classifier run together. Skip either step and you do not get the bake-off win.
+
+### PrismRAG taxonomy — optional, not mandatory
+
+**Most users never need PrismRAG taxonomy.** A plain `pip install prismguard` (rules) or `pip install "prismguard[guard-model]"` (`light` / `heavy` ONNX) is enough for hub FAQ and production latency. Taxonomy is an **opt-in accuracy layer** for the learn-from-seed / vertical PI path.
+
+#### How it improves PrismGuard
+
+When you install the `[prism]` extra and run **`domain_pilot`**, PrismGuard uses **PrismRAG** (`prismrag-patch`) to build a **word-graph / taxonomy** from your seed corpus and domain overlay:
+
+```text
+seed YAML + domain overlay
+        |
+        v
+  PrismRAG word-graph  (categories, attack/benign neighbors)
+        |
+        v
+  prompt scored with attack_sim / benign_sim + graph connectivity
+        |
+        v
+  fusion / corpus_match  (catches paraphrases rules alone miss)
+        +
+  domain ONNX (after you train / download for that domain)
+```
+
+| Without `[prism]` / without `domain_pilot` | With `[prism]` + `domain_pilot` |
+|--------------------------------------------|----------------------------------|
+| Tier-1 rules + structural heuristics | Same rules/structural |
+| Optional ONNX (`light` / `heavy`) | Optional ONNX **plus** word-graph |
+| HashEmbedder / keyword fallback | Attack vs benign similarity from **your** seed language |
+| No “learns from corpus words” claim | Feedback → retrain → same profile improves on *your* traffic |
+
+Taxonomy does **not** replace training. Order stays: **train (or starter) → point artifact → `domain_pilot`**.
+
+#### Is it mandatory?
+
+| Goal | Need PrismRAG taxonomy? | What to use |
+|------|-------------------------|-------------|
+| Hub / FAQ, low false positives | **No** | `web_chat` — `pip install prismguard` |
+| Production ONNX, lower latency | **No** | `light` — `pip install "prismguard[guard-model]"` |
+| Scorecard / always-on ONNX | **No** | `heavy` — same install as light |
+| Learn from seed / customer words / vertical PI after train | **Yes** | `domain_pilot` + `[prism]` + domain artifact |
+
+`web_chat`, `light`, and `heavy` **intentionally skip** taxonomy (`prismrag_taxonomy: False`). Only `domain_pilot` turns it on.
+
+#### Enable it (only when you want this path)
+
+```bash
+pip install "prismguard[guard-model,prism]"
+# After train (or starter download) for YOUR domain:
+export PRISMGUARD_DOMAIN=finance          # any slug
+export PRISMGUARD_ARTIFACT_ID=prism-pi-finance-v1
+export PRISMGUARD_USE_ONNX=1
+prismguard caps --profile domain_pilot    # expect prismrag_taxonomy: True
+```
+
+```python
+from prismguard.runtime.factory import create_checker_for_app
+
+checker = create_checker_for_app("domain_pilot", domain="finance", use_onnx=True)
+```
+
+Details: [Learn from seed / words / DB](#learn-from-seed--words--db) · PrismRAG product: [GitHub](https://github.com/aminparva84/InsightPrismRAG).
 
 ### Pick your features
 
@@ -37,12 +160,12 @@ Use this as the integrator checklist. Combine rows — do not stop at the first 
 
 | # | Feature you want | Install / env | Factory / call | Notes |
 |---|------------------|---------------|----------------|-------|
-| 1 | **Hub / FAQ** — low false positives, rules-only | `pip install prismguard` | `create_checker_for_app("web_chat")` | No ONNX. Not scorecard. |
-| 2 | **Light ONNX** — production latency (**recommended with ONNX**) | `pip install "prismguard[guard-model]"` + `prismguard-model download` | `create_checker_for_app("light")` | Alias: `low_latency`. Measured ~3× faster mean than `heavy` at same F1 on our set. |
-| 3 | **Heavy ONNX** — scorecard / always-on policy | same as #2 | `create_checker_for_app("heavy")` | Alias: `security_bench`. Use for holdout methodology, not for stack p50. |
-| 4 | **Law domain overlay** | `#2` or `#3`, or `PRISMGUARD_DOMAIN=law` | Implied by `light` / `heavy` / `law_pilot` | Overlay entries + law triage thresholds. |
-| 5 | **Word-graph / taxonomy on seed** (`[prism]`) | `pip install "prismguard[guard-model,prism]"` | `create_checker_for_app("law_pilot", use_onnx=True)` | **Not** on `web_chat` / `light` / `heavy` (those skip taxonomy). |
-| 6 | **Feedback → retrain loop** | `PRISMGUARD_FEEDBACK_PERSIST=1` | same as #5 (or any full checker) | Then `prismguard feedback export` → `prismguard-model train`. |
+| 1 | **Hub / FAQ** — low false positives, rules-only | `pip install prismguard` | `create_checker_for_app("web_chat")` | No ONNX. Not scorecard. **No taxonomy.** |
+| 2 | **Light ONNX** — production latency (**recommended with ONNX**) | `pip install "prismguard[guard-model]"` + `prismguard-model download` | `create_checker_for_app("light")` | Alias: `low_latency`. **Skips taxonomy.** |
+| 3 | **Heavy ONNX** — scorecard / always-on policy | same as #2 | `create_checker_for_app("heavy")` | Alias: `security_bench`. **Skips taxonomy.** |
+| 4 | **Domain overlay** | `PRISMGUARD_DOMAIN=<any-slug>` | with `domain_pilot` | Any slug; bundled law/finance/healthcare are optional. |
+| 5 | **Word-graph / taxonomy** (`[prism]`) — **any domain** | `pip install "prismguard[guard-model,prism]"` + domain artifact | **`domain_pilot`** + `domain=<slug>` + `use_onnx=True` | **Not** law-only. `law_pilot` = deprecated alias for law. Never invent `*_pilot` per vertical. |
+| 6 | **Feedback → retrain loop** | `PRISMGUARD_FEEDBACK_PERSIST=1` | same as #5 | Export → train on **your** traffic. Improves accuracy for that domain. |
 | 7 | **Shadow ONNX** (observe, don’t enforce) | `#2` weights + `PRISMGUARD_SHADOW_ONNX=1` | `create_checker_for_app("web_chat", shadow_onnx=True)` | Verdict in `details["shadow_onnx"]` only. |
 | 8 | **Tenant lexicon** (customer words) | `PRISMGUARD_TENANT_LEXICON_PATH=…` | any full path | Production lexicon: **Business+**. |
 | 9 | **Persistent DB seed / feedback** | `PRISMGUARD_STORAGE_BACKEND=pgvector` + `PRISMGUARD_STORAGE_DSN` + license | any full path | **Team+**. Memory is OSS default. |
@@ -51,7 +174,7 @@ Use this as the integrator checklist. Combine rows — do not stop at the first 
 | 12 | **Output scan** (post-LLM) | library | `scan_output(response)` | Complements input `check()`. |
 | 13 | **Verify what you actually enabled** | — | `prismguard caps --profile <name>` | Truth table: `onnx_tier`, `prismrag_taxonomy`, `feedback_persist`, … |
 
-**Agent / integrator rule:** if you claim scorecard numbers → enable **#3 (heavy)** + download. If you claim stack UX latency → **#2 (light)**. If you claim “learns from corpus/DB” → **#5 + #6** (and **#9** for DB). Never claim those from `#1` alone.
+**Agent / integrator rule:** if you claim scorecard numbers → enable **#3 (heavy)** + download. If you claim stack UX latency → **#2 (light)**. If you claim “learns from corpus/DB” or **high PI attack block on a vertical** → **first train (or starter download) for that domain, then `domain_pilot`** (#6 then #5). Never claim those from `#1` alone. Never invent `finance_pilot` / `healthcare_pilot`.
 
 ### Heavy vs light ONNX (both worlds)
 
@@ -72,7 +195,7 @@ from prismguard.runtime.factory import create_checker_for_app
 
 checker = create_checker_for_app("light")   # #2 production (recommended with ONNX)
 # checker = create_checker_for_app("heavy")  # #3 scorecard / always-on
-# checker = create_checker_for_app("law_pilot", use_onnx=True)  # #5 learn-from-seed
+# checker = create_checker_for_app("domain_pilot", domain="finance", use_onnx=True)  # #5
 ```
 
 ### Which profile is best? (measured)
@@ -90,7 +213,8 @@ Local run of `python scripts/compare_profiles.py` (2026-07-20, CPU; 10 attacks +
 | Hub / FAQ, lowest FP | **`web_chat`** | Benign allow 1.00, sub-ms; accepts lower attack recall |
 | Production / stack | **`light`** | Same attack block + F1 as `heavy`, ~3× lower mean latency, far lower p50 / ONNX invoke rate |
 | Scorecard / always-on ONNX policy | **`heavy`** | Methodology parity — not because it beat `light` on F1 here |
-| Learn from corpus / words | **`law_pilot` + `[prism]`** | Taxonomy + feedback (#5–#6); not `light`/`heavy` |
+| Learn from corpus / words | **`domain_pilot` + `[prism]` + train on your domain** | Taxonomy + feedback (#5–#6); not `light`/`heavy` |
+| High PI attack block on a vertical | **Train → `domain_pilot` + domain artifact** | Finance mid proof: **100%** PI attack with this path (not `web_chat`) |
 
 **FP note:** law-oriented `prism-pi-v1` under `light`/`heavy` can block short greetings like “Hi”. Keep hubs on `web_chat` (or shadow ONNX #7) until a hub artifact passes gates.
 
@@ -102,6 +226,76 @@ prismguard caps --profile light
 ```
 
 Examples: [`examples/README.md`](examples/README.md) · Do/don’t: [`docs/best-practices.md`](docs/best-practices.md) · Install recipes: [Install](#install) · Learn loop: [Learn from seed / words / DB](#learn-from-seed--words--db)
+
+## Domain ONNX artifacts (mandatory)
+
+**Agents and integrators:** PrismGuard is **not** “one universal ONNX for every vertical.” Default `prism-pi-v1` is **law-bench**.
+
+**Sequence (do not reverse):** **(1) train or download domain weights → (2) point env at them → (3) `domain_pilot`.**  
+`domain_pilot` without a matching artifact is incomplete.
+
+Bundled packs (`law`, `finance`, `healthcare`, `general`) are **optional shortcuts** — not required. Adopt **any** domain slug.
+
+### Happy path (copy this) — train first, pilot second
+
+```text
+1. Label YOUR attacks + benigns (holdouts stay out of train)
+2. TRAIN → prismguard-model train --domain-pack <domain> --artifact-id prism-pi-<domain>-v1 …
+3. Gate: attack holdout block + benign allow
+4. ONLY THEN → domain_pilot + PRISMGUARD_ARTIFACT_ID=prism-pi-<domain>-v1
+```
+
+```bash
+# Step A — TRAIN first (custom vertical; no bundled pack required)
+prismguard-model train \
+  --domain-pack acme_claims \
+  --artifact-id prism-pi-acme_claims-v1 \
+  --feedback-jsonl ./acme_feedback.jsonl \
+  --normal-txt ./acme_benign.txt \
+  --holdout-domain acme_claims
+
+# Step B — THEN wire env + domain_pilot
+export PRISMGUARD_DOMAIN=acme_claims
+export PRISMGUARD_ARTIFACT_ID=prism-pi-acme_claims-v1
+export PRISMGUARD_USE_ONNX=1
+prismguard caps --profile domain_pilot   # expect prismrag_taxonomy: True
+```
+
+```python
+from prismguard.runtime.factory import create_checker_for_app
+
+# Step C — AFTER train — taxonomy + YOUR artifact
+checker = create_checker_for_app("domain_pilot", domain="acme_claims", use_onnx=True)
+```
+
+### Optional starter defaults (no accuracy guarantee)
+
+If you **do not have a labeled DB yet**, you may download a PrismGuard **starter** ONNX. These are convenience defaults only — **they do not guarantee accuracy** on your production traffic. When you have feedback, **train your own** artifact and switch `PRISMGUARD_ARTIFACT_ID`.
+
+| Domain shortcut | Artifact id | Download |
+|-----------------|-------------|----------|
+| `law` | `prism-pi-v1` | `prismguard-model download` (or `--domain law`) |
+| `finance` | `prism-pi-finance-v1` | `prismguard-model download --domain finance` |
+| `healthcare` | `prism-pi-healthcare-v1` | `prismguard-model download --domain healthcare` |
+
+```bash
+prismguard-model download --list
+# Then for bake-off / learn path:
+export PRISMGUARD_DOMAIN=finance
+export PRISMGUARD_ARTIFACT_ID=prism-pi-finance-v1
+export PRISMGUARD_USE_ONNX=1
+# create_checker_for_app("domain_pilot", domain="finance", use_onnx=True)
+```
+
+**Measured proof (FinancePackBench mid, seed 42):** finance train → `domain_pilot` + `prism-pi-finance-v1` → **PI attack block 100%**, PI benign allow 100% (vs `web_chat` ~15% PI). That is a **gated** finance path — not a promise that the public starter fits every bank’s traffic without retrain.
+
+Do **not:**
+
+- Force law `prism-pi-v1` on non-law traffic “to win the bench”
+- Invent `finance_pilot` / `healthcare_pilot` — always `domain_pilot` + `domain=…`
+- Call PI done with regex-only / `web_chat`-only when the ask was domain-calibrated Guard
+
+Custom packs: put `overlay.yaml` under `PRISMGUARD_DOMAIN_ROOT/<slug>/`, or set `PRISMGUARD_DOMAIN_OVERLAY=/path/to/overlay.yaml`. If neither exists, PrismGuard scaffolds a minimal pack under `~/.cache/prismguard/domains/<slug>/` so `domain_pilot` still runs — replace it with your themes for real quality. Details: [`docs/guard-model-training.md`](docs/guard-model-training.md).
 
 ## Who is it for?
 
@@ -126,7 +320,7 @@ Most scanners return a fuzzy score (`0.87`) with little explanation. Incident re
 - You expect a guarantee against never-seen zero-day jailbreaks  
 - You force law-bench ONNX onto hub FAQ traffic without a matching artifact  
 
-Install: `pip install "prismguard[prism,guard-model]==0.1.9"` · Architecture: [docs/architecture.md](docs/architecture.md)
+Install: `pip install "prismguard[prism,guard-model]==0.1.10"` · Architecture: [docs/architecture.md](docs/architecture.md)
 
 ---
 
@@ -155,7 +349,7 @@ PrismGuard sits **in front of your LLM** and classifies each user prompt before 
 | Explainable decisions | all | Auditable `resolution_gate` on every allow/block |
 | Law domain pack | #4 | Legal overlay + triage thresholds |
 | Taxonomy / word-graph | #5 | Seed words become graph features (`[prism]`) |
-| Feedback → train | #6 | Learn from your traffic (opt-in) |
+| Feedback → train | #6 | Learn from your traffic; **required** when entering a new domain |
 | Tenant lexicon | #8 | Customer entity words / severity |
 | Persistent storage | #9 | Team+ pgvector/chroma seed + feedback |
 | LLM Judge | full ONNX paths | Escalates uncertain cases (~7% on law bench) |
@@ -183,12 +377,12 @@ We complement the ecosystem — PrismGuard is the **firewall layer** when you ne
 
 ## Install
 
-Pick a recipe that matches the [feature table](#pick-your-features). From [PyPI](https://pypi.org/project/prismguard/0.1.9/).
+Pick a recipe that matches the [feature table](#pick-your-features). From [PyPI](https://pypi.org/project/prismguard/0.1.10/).
 
 ### A — Hub / FAQ only (feature #1)
 
 ```bash
-pip install prismguard==0.1.9
+pip install prismguard==0.1.10
 ```
 
 ```python
@@ -199,7 +393,7 @@ checker = create_checker_for_app("web_chat")  # rules-first; no surprise ONNX
 ### B — Light or heavy ONNX (features #2 / #3)
 
 ```bash
-pip install "prismguard[guard-model]==0.1.9"
+pip install "prismguard[guard-model]==0.1.10"
 prismguard-model download   # ~705 MB; required — light/heavy raise if missing
 ```
 
@@ -210,32 +404,35 @@ checker = create_checker_for_app("light")   # #2 production latency (hybrid)
 # checker = create_checker_for_app("heavy")  # #3 scorecard / max coverage (first)
 ```
 
-### C — Full learn-from-seed (features #5 + #6, optional #8 / #9)
+### C — Taxonomy / learn-from-seed — **any domain** (features #5 + #6)
+
+Use **`domain_pilot`** (not `law_pilot` unless the domain is law). Taxonomy works for every domain.
 
 ```bash
-pip install "prismguard[guard-model,prism]==0.1.9"
-prismguard-model download
+pip install "prismguard[guard-model,prism]==0.1.10"
+prismguard-model download --domain finance   # or law | healthcare | train your own
 export PRISMGUARD_USE_ONNX=1
+export PRISMGUARD_DOMAIN=finance             # ANY slug — taxonomy is not law-locked
+export PRISMGUARD_ARTIFACT_ID=prism-pi-finance-v1   # must match that domain
 export PRISMGUARD_FEEDBACK_PERSIST=1
-# optional Team+ DB:
-# export PRISMGUARD_STORAGE_BACKEND=pgvector
-# export PRISMGUARD_STORAGE_DSN=postgresql://...
-# optional lexicon:
-# export PRISMGUARD_TENANT_LEXICON_PATH=/path/to/lexicon.yaml
-prismguard caps --profile law_pilot   # expect prismrag_taxonomy: True, feedback_persist: True
+prismguard caps --profile domain_pilot       # expect prismrag_taxonomy: True
 ```
 
 ```python
-checker = create_checker_for_app("law_pilot", use_onnx=True)  # taxonomy path — not light/heavy
+# Canonical — taxonomy for THIS domain
+checker = create_checker_for_app("domain_pilot", domain="finance", use_onnx=True)
+
+# law_pilot is ONLY a deprecated alias for domain="law":
+# checker = create_checker_for_app("law_pilot", use_onnx=True)
 ```
 
 ### D — Kitchen-sink local (taxonomy + ONNX + tools)
 
 ```bash
-pip install "prismguard[prism,guard-model]==0.1.9"
+pip install "prismguard[prism,guard-model]==0.1.10"
 prismguard-model download
 prismguard doctor
-prismguard caps --profile law_pilot
+prismguard caps --profile domain_pilot
 prismguard eval self-check
 prismguard check "your prompt here"
 ```
@@ -273,7 +470,7 @@ prismguard-model download
 
 ```bash
 prismguard doctor
-prismguard caps --profile light       # or: heavy | law_pilot | web_chat
+prismguard caps --profile light       # or: heavy | domain_pilot | web_chat
 prismguard eval self-check
 prismguard check "Summarize indemnity caps in a vendor MSA."
 ```
@@ -310,7 +507,7 @@ confidence=0.9124
 ```python
 from prismguard.runtime.factory import create_checker_for_app
 
-checker = create_checker_for_app("light")  # or "heavy" / "web_chat" / law_pilot+use_onnx=True
+checker = create_checker_for_app("light")  # or "heavy" / "web_chat" / domain_pilot(domain=…)+use_onnx=True
 result = checker.check(user_prompt)
 if result.decision == "block":
     return {"error": "blocked", "gate": result.resolution_gate}
@@ -365,7 +562,7 @@ Details: [`docs/prismguard-design.md`](docs/prismguard-design.md) · [`docs/inte
 ## FAQ
 
 **Which factory should I use?**  
-See [Pick your features](#pick-your-features) and [measured results](#which-profile-is-best-measured). Short version: hub → `web_chat`; production/stack ONNX → **`light`**; scorecard / always-on → `heavy`; learn-from-seed → `law_pilot` + `[prism]` + feedback.
+See [Pick your features](#pick-your-features) and [measured results](#which-profile-is-best-measured). Short version: hub → `web_chat`; production/stack ONNX → **`light`**; scorecard / always-on → `heavy`; learn-from-seed / any domain after train → `domain_pilot` + `[prism]` + feedback.
 
 **Where is the ONNX model?**  
 Not in the PyPI wheel (size limits). Run `prismguard-model download` once after install, or set `PRISMGUARD_MODEL_DOWNLOAD_URL` for a private mirror. `light` / `heavy` **raise** if weights are missing.
@@ -374,7 +571,13 @@ Not in the PyPI wheel (size limits). Run `prismguard-model download` once after 
 On our compare set, **same F1 / attack block**; **`light` is ~3× faster mean** and much lower p50. Use `heavy` for scorecard methodology or a never-skip-ONNX policy — not because it scored higher. Re-run: `python scripts/compare_profiles.py`.
 
 **Does “learns from your corpus” work with `light` / `heavy`?**  
-No. Those skip taxonomy. Use feature **#5** (`law_pilot` + `[prism]`) and **#6** feedback.
+No. Those skip taxonomy. Use feature **#5**: **`domain_pilot`** (any domain — not `law_pilot` unless the domain is law) + `[prism]` + domain train/artifact, and **#6** feedback.
+
+**Is PrismRAG taxonomy mandatory for all users?**  
+**No.** Most installs never need it. Hub → `web_chat`; production ONNX → `light` / `heavy`. Taxonomy is optional and only turns on under `domain_pilot` + `pip install "prismguard[…,prism]"`. See [PrismRAG taxonomy](#prismrag-taxonomy--optional-not-mandatory).
+
+**How does PrismRAG taxonomy improve PrismGuard?**  
+It builds a word-graph from your seed/domain overlay so paraphrases score closer to attack or benign examples in *your* language, then fuses that with rules and (when enabled) domain ONNX. It does not replace train-first. See [how it improves](#how-it-improves-prismguard).
 
 **Does this call OpenAI?**  
 No — by default. The ONNX classifier and rules run locally. An optional LLM Judge can call OpenAI if you configure it; most traffic never escalates.
@@ -394,7 +597,7 @@ Yes. Tier-1 rules, seed corpus imports, domain overlays, and tenant lexicons (#8
 
 - [x] Law domain pack (verified)
 - [x] ONNX classifier (`prism-pi-v1`)
-- [x] PyPI release ([0.1.9](https://pypi.org/project/prismguard/0.1.9/))
+- [ ] PyPI release ([0.1.10](https://pypi.org/project/prismguard/0.1.10/) — pending upload)
 - [x] HTTP API (`prismguard serve`)
 - [x] ChorusGraph integration
 - [ ] Healthcare validation
@@ -448,33 +651,38 @@ Full report: [`benchmark/law/results/current/COMPARISON_REPORT.md`](benchmark/la
 
 ## Learn from seed / words / DB
 
-This is features **#5–#9** — not enabled by `web_chat`, `light`, or `heavy` alone.
+This is features **#5–#9** — not enabled by `web_chat`, `light`, or `heavy` alone (those **skip taxonomy**).  
+**Not mandatory** for every user — only if you want learn-from-seed / vertical PI after train. Primer: [PrismRAG taxonomy](#prismrag-taxonomy--optional-not-mandatory).
+
+**Profile for taxonomy is always `domain_pilot`** — for law, finance, healthcare, or your slug.  
+`law_pilot` only means “`domain_pilot` with `domain=law`.” Taxonomy is **not** locked to law.
 
 Closed loop (OSS vs Team+):
 
 ```text
 seed YAML / domain overlay  →  storage (memory = OSS, or Team+ DB)
 tenant lexicon (optional)   →  severity / force-classifier   [Business+ for production lexicon]
-feedback persist            →  export JSONL → corpus-plan → train → artifact
-                            →  PRISMGUARD_GUARD_MODEL_PATH / PRISMGUARD_ARTIFACT_ID
+feedback persist            →  export JSONL → train → prism-pi-<your-domain>-v1
+                            →  domain_pilot + PRISMGUARD_ARTIFACT_ID + PRISMGUARD_DOMAIN
 ```
 
 | Step | Feature | Env / install | Tier |
 |------|---------|---------------|------|
-| Word-graph / taxonomy on seed | #5 | `pip install "prismguard[prism]"` + `law_pilot` (**not** `light`/`heavy`) | OSS |
-| Domain overlay | #4 | `PRISMGUARD_DOMAIN=law` or `law_pilot` | OSS |
-| ONNX enforce | #2/#3 style | `PRISMGUARD_USE_ONNX=1` + `prismguard-model download` | OSS |
-| Feedback queue | #6 | `PRISMGUARD_FEEDBACK_PERSIST=1` → `prismguard feedback export` → `prismguard-model train` | OSS |
-| Persistent seed / feedback DB | #9 | `PRISMGUARD_STORAGE_BACKEND=pgvector` + `PRISMGUARD_STORAGE_DSN` + license | **Team+** |
+| Word-graph / taxonomy | #5 | `[prism]` + **`domain_pilot`** + `domain=<any>` (**not** `light`/`heavy`/`law_pilot` for non-law) | OSS |
+| Domain overlay | #4 | `PRISMGUARD_DOMAIN=<any-slug>` | OSS |
+| ONNX (starter or yours) | — | `PRISMGUARD_USE_ONNX=1` + artifact id matching that domain | OSS |
+| Feedback → train | #6 | `PRISMGUARD_FEEDBACK_PERSIST=1` → export → `prismguard-model train` | OSS |
+| Persistent seed / feedback DB | #9 | `PRISMGUARD_STORAGE_BACKEND=pgvector` + DSN + license | **Team+** |
 | Tenant lexicon file | #8 | `PRISMGUARD_TENANT_LEXICON_PATH=…` | OSS path / **Business+** production |
 
-**“Learns from your DB”** means Team+ persistent storage (#9) + the feedback→train loop (#6) — never memory-only rules (#1).
+**“Learns from your DB”** means Team+ persistent storage (#9) + feedback→train (#6) + **`domain_pilot`** for that domain — never memory-only rules (#1), never law taxonomy on finance traffic.
 
 ```bash
-prismguard caps --profile law_pilot   # onnx_ready, prismrag_taxonomy, feedback_persist, …
+export PRISMGUARD_DOMAIN=finance   # or law | healthcare | your_slug
+prismguard caps --profile domain_pilot   # expect prismrag_taxonomy: True, domain_overlay: finance
 ```
 
-Full recipe: [`docs/integration-guide.md`](docs/integration-guide.md#learn-from-seed--words--db).
+Full recipe: [`docs/integration-guide.md`](docs/integration-guide.md#learn-from-seed--words--db) · Example: [`examples/chorusgraph_domain_guard.py`](examples/chorusgraph_domain_guard.py).
 
 ### ChorusGraph (feature #10)
 
@@ -483,7 +691,7 @@ Full recipe: [`docs/integration-guide.md`](docs/integration-guide.md#learn-from-
 | Hub fail-open | `web_chat` (#1) | [`examples/chorusgraph_hub_guard.py`](examples/chorusgraph_hub_guard.py) |
 | Production / stack | `light` (#2) | [`examples/chorusgraph_law_guard.py`](examples/chorusgraph_law_guard.py) |
 | Scorecard / max coverage | `heavy` (#3) | same helpers, swap profile |
-| Learn-from-seed graph | `law_pilot` + ONNX (#5) | set env from install recipe **C** |
+| Taxonomy / any-domain learn | **`domain_pilot`** + ONNX (#5) | [`examples/chorusgraph_domain_guard.py`](examples/chorusgraph_domain_guard.py) |
 
 ```python
 from prismguard.integrations.chorusgraph import (
@@ -492,7 +700,7 @@ from prismguard.integrations.chorusgraph import (
     route_after_guard,
 )
 
-checker = create_checker_for_app("light")  # or "heavy" / law_pilot+use_onnx=True
+checker = create_checker_for_app("light")  # or "heavy" / domain_pilot(domain=…)+use_onnx=True
 guard = make_guard_handler(checker, block_on=frozenset({"block", "gray"}))
 # START → guard → [end | retrieve…]  BEFORE cache hops
 ```
@@ -548,7 +756,7 @@ guard_node = make_guard_handler(
 **Don’t**
 
 - Set `PRISMGUARD_USE_ONNX=1` globally “to turn features on.”
-- Put `law_pilot` + ONNX on customer FX/FAQ ingress (use `#5` for learn/scorecard loops, not hub UX).
+- Use `law_pilot` or law `prism-pi-v1` on finance/FX/FAQ (use `#5 domain_pilot` + matching **domain** artifact for learn/PI).
 - Cite law COMPARISON_REPORT / scorecard rates from the `web_chat` path.
 - Assume input Guard replaces output grounding (pair PrismShine or `#12` output scan).
 
@@ -558,7 +766,7 @@ guard_node = make_guard_handler(
 
 | Need | Feature | Command / doc |
 |------|---------|----------------|
-| Capability truth table | #13 | `prismguard caps --profile light` · `heavy` · `law_pilot` |
+| Capability truth table | #13 | `prismguard caps --profile light` · `heavy` · `domain_pilot` |
 | Compare profiles (which is best?) | #1–#3 | `python scripts/compare_profiles.py` |
 | Latency by gate | #2 vs #3 | `python scripts/latency_by_gate.py --profile light` |
 | S1 / attack miss analysis | #2/#3 | `python scripts/s1_miss_analysis.py --profile light --attacks PATH` |

@@ -207,9 +207,15 @@ def cmd_caps(args: argparse.Namespace) -> int:
         _safe_print(json.dumps(safe, indent=2, ensure_ascii=True))
     else:
         _safe_print(format_capabilities(caps))
-    # Non-zero if claiming scorecard-ish profile without ONNX, or learn path without taxonomy.
+    # Non-zero if claiming scorecard-ish / learn path without ONNX ready.
     prof = str(caps.get("profile") or "")
-    if prof in ("security_bench", "law_pilot", "low_latency") and not caps.get("onnx_ready"):
+    requested = str(caps.get("profile_requested") or prof)
+    needs_onnx = prof in ("security_bench", "low_latency", "domain_pilot") or requested in (
+        "law_pilot",
+        "heavy",
+        "light",
+    )
+    if needs_onnx and not caps.get("onnx_ready"):
         return 1
     return 0
 
@@ -361,7 +367,14 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     init_cmd = sub.add_parser("init", help="Bootstrap bundled seed, optional domain pack, optional tenant context")
-    init_cmd.add_argument("--domain", choices=list_domains(), help="Optional domain pack (law, healthcare, finance)")
+    init_cmd.add_argument(
+        "--domain",
+        default=None,
+        help=(
+            "Optional domain slug (any custom pack OK; scaffolds if missing). "
+            f"Bundled: {', '.join(list_domains())}"
+        ),
+    )
     init_cmd.add_argument("--profile", default="authored", choices=["authored", "full"])
     init_cmd.add_argument("--context-file", type=Path, help="Optional tenant lexicon (.yaml, .json, .csv)")
     init_cmd.add_argument("--context-table", help="Optional SQL table name with term rows")

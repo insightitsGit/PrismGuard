@@ -1,0 +1,37 @@
+{
+  "profile": "full",
+  "total_examples": 6000,
+  "injection_examples": 3068,
+  "benign_examples": 2932,
+  "sources": {
+    "finance-train": 80,
+    "finance-hardneg": 16,
+    "finance-overlay": 5,
+    "neuralchemy-core-train": 1157,
+    "neuralchemy-core-test": 226,
+    "s-labs-train": 2919,
+    "s-labs-test": 559,
+    "s-labs-validation": 523,
+    "yanismiraoui-prompt-injections": 257,
+    "neuralchemy-core-validation": 246,
+    "seed-v0": 10,
+    "mined-slabs": 2
+  },
+  "categories": {
+    "benign_adjacent": 2932,
+    "prompt_injection": 35,
+    "direct_instruction_override": 547,
+    "roleplay_jailbreak": 97,
+    "data_exfiltration_via_output": 17,
+    "unclassified_imported": 2204,
+    "system_prompt_exfiltration": 44,
+    "encoding_obfuscation": 77,
+    "indirect_injection": 22,
+    "payload_splitting": 3,
+    "multi_turn_escalation": 11,
+    "context_overflow": 9,
+    "refusal_suppression": 2
+  },
+  "fingerprint": "fdacc5280f2abc71",
+  "built_at": "2026-07-23T23:49:10.541073+00:00"
+}

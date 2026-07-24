@@ -7,9 +7,8 @@ import json
 from pathlib import Path
 
 from prismguard.models.constants import DEFAULT_MAX_LENGTH
-from prismguard.models.eval import DOMAIN_CHOICES
-
-_DOMAIN_PACK_CHOICES = ("law", "healthcare", "finance", "general")
+# Bundled packs are optional shortcuts — any custom slug is accepted at runtime.
+_DOMAIN_PACK_HINTS = ("law", "healthcare", "finance", "general")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -54,14 +53,21 @@ def main(argv: list[str] | None = None) -> int:
     train_cmd.add_argument(
         "--domain-pack",
         default="",
-        choices=["", *_DOMAIN_PACK_CHOICES],
-        help="Opt-in domain overlay + augment (default: none)",
+        help=(
+            "Opt-in domain slug (bundled shortcuts: "
+            + "|".join(_DOMAIN_PACK_HINTS)
+            + " — optional; any custom slug OK). Default: none."
+        ),
     )
     train_cmd.add_argument("--oversample-law", action="store_true")
     train_cmd.add_argument("--class-weighted", action="store_true")
     train_cmd.add_argument("--focal-loss", action="store_true")
     train_cmd.add_argument("--holdout-early-stop", action="store_true")
-    train_cmd.add_argument("--holdout-domain", default="law", choices=list(DOMAIN_CHOICES))
+    train_cmd.add_argument(
+        "--holdout-domain",
+        default="",
+        help="Domain slug for eval/model_card (default: --domain-pack or law)",
+    )
     train_cmd.add_argument(
         "--normal-txt",
         default="",
@@ -81,8 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     stats_cmd.add_argument(
         "--domain-pack",
         default="",
-        choices=["", *_DOMAIN_PACK_CHOICES],
-        help="Opt-in domain pack (default: none)",
+        help="Opt-in domain slug (bundled shortcuts optional; any custom slug OK)",
     )
     stats_cmd.add_argument("--oversample-law", action="store_true")
 
@@ -98,15 +103,22 @@ def main(argv: list[str] | None = None) -> int:
     plan_cmd.add_argument(
         "--domain-pack",
         default="",
-        choices=["", *_DOMAIN_PACK_CHOICES],
-        help="Opt-in domain pack (default: none)",
+        help="Opt-in domain slug (bundled shortcuts optional; any custom slug OK)",
     )
-    plan_cmd.add_argument("--holdout-domain", default="law", choices=list(DOMAIN_CHOICES))
+    plan_cmd.add_argument(
+        "--holdout-domain",
+        default="",
+        help="Domain slug for plan eval defaults (default: --domain-pack or law)",
+    )
     plan_cmd.add_argument("--normal-txt", default="")
     plan_cmd.add_argument("--normal-yaml", default="")
 
     eval_cmd = sub.add_parser("eval", help="Classifier-only holdout metrics (library KPI)")
-    eval_cmd.add_argument("--domain", default="law", choices=list(DOMAIN_CHOICES))
+    eval_cmd.add_argument(
+        "--domain",
+        default="law",
+        help="Domain slug (bundled or custom; custom needs overlay + --normal-txt)",
+    )
     eval_cmd.add_argument("--artifact-id", default="")
     eval_cmd.add_argument("--artifact-path", default="")
     eval_cmd.add_argument("--normal-txt", default="", help="Opt-in FAQ/normal suite (default: domain)")
@@ -114,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     eval_cmd.add_argument("--json", action="store_true")
 
     calibrate_cmd = sub.add_parser("calibrate", help="Holdout-safe fusion/threshold tuning")
-    calibrate_cmd.add_argument("--domain", default="law", choices=list(DOMAIN_CHOICES))
+    calibrate_cmd.add_argument("--domain", default="law", help="Domain slug (bundled or custom)")
     calibrate_cmd.add_argument("--output", type=Path, default=Path("triage.tuned.yaml"))
 
     fit_cal_cmd = sub.add_parser("fit-calibration", help="Fit temperature scaling on existing artifact")
@@ -122,16 +134,29 @@ def main(argv: list[str] | None = None) -> int:
     fit_cal_cmd.add_argument("--artifact-id", default="prism-pi-v1")
     fit_cal_cmd.add_argument("--artifact-path", default="")
     fit_cal_cmd.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
-    fit_cal_cmd.add_argument("--domain", default="law", choices=list(DOMAIN_CHOICES))
+    fit_cal_cmd.add_argument("--domain", default="law", help="Domain slug (bundled or custom)")
 
     download_cmd = sub.add_parser(
         "download",
-        help="Download ONNX model weights (not shipped in PyPI wheel due to size limits)",
+        help=(
+            "Download optional starter ONNX weights (not in PyPI wheel). "
+            "Defaults (law|finance|healthcare) do NOT guarantee accuracy on your traffic."
+        ),
     )
     download_cmd.add_argument(
         "--artifact-id",
-        default="prism-pi-v1",
-        help="Artifact id (default: prism-pi-v1 law proof). Use prism-pi-hub-v1 when published.",
+        default="",
+        help="Artifact id (default: prism-pi-v1). Or use --domain law|finance|healthcare.",
+    )
+    download_cmd.add_argument(
+        "--domain",
+        default="",
+        help="Starter shortcut: law|finance|healthcare → matching prism-pi-*-v1",
+    )
+    download_cmd.add_argument(
+        "--list",
+        action="store_true",
+        help="List optional starter defaults (no accuracy guarantee)",
     )
 
     args = parser.parse_args(argv)
@@ -170,9 +195,9 @@ def main(argv: list[str] | None = None) -> int:
             str(args.max_length),
             "--max-train-examples",
             str(args.max_train_examples),
-            "--holdout-domain",
-            args.holdout_domain,
         ]
+        if args.holdout_domain:
+            train_argv.extend(["--holdout-domain", args.holdout_domain])
         if args.from_storage:
             train_argv.append("--from-storage")
         if args.storage_backend:
@@ -228,13 +253,14 @@ def main(argv: list[str] | None = None) -> int:
         from prismguard.models.corpus import plan_training_corpus
 
         domain_pack = (args.domain_pack or "").strip() or ("law" if args.law_pack else "") or None
+        holdout = (args.holdout_domain or "").strip() or domain_pack or "law"
         plan = plan_training_corpus(
             profile=args.profile,
             feedback_paths=[Path(p) for p in args.feedback_jsonl],
             seed_yaml_paths=[Path(p) for p in args.seed_yaml],
             domain_pack=domain_pack,
             from_storage=args.from_storage,
-            holdout_domain=args.holdout_domain,
+            holdout_domain=holdout,
             normal_txt=Path(args.normal_txt) if args.normal_txt else None,
             normal_yaml=Path(args.normal_yaml) if args.normal_yaml else None,
         )
@@ -292,9 +318,33 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "download":
         from prismguard.models.artifact_fetch import download_artifact
+        from prismguard.models.default_artifacts import (
+            format_default_artifacts_help,
+            resolve_default_artifact_id,
+        )
 
-        artifact_dir = download_artifact(args.artifact_id, progress=True)
+        if args.list:
+            from prismguard.runtime.capabilities import ascii_safe
+
+            print(ascii_safe(format_default_artifacts_help()))
+            print(
+                "\nWARNING: Starter defaults do NOT guarantee accuracy on your "
+                "production traffic. Train on your DB when you can."
+            )
+            return 0
+        artifact_id = (args.artifact_id or "").strip()
+        if args.domain:
+            artifact_id = resolve_default_artifact_id(args.domain)
+        elif not artifact_id:
+            artifact_id = resolve_default_artifact_id("law")
+        else:
+            artifact_id = resolve_default_artifact_id(artifact_id)
+        artifact_dir = download_artifact(artifact_id, progress=True)
         print(f"Downloaded artifact to {artifact_dir}")
+        print(
+            "Note: starter defaults do not guarantee accuracy on your traffic. "
+            "Prefer train -> domain_pilot + your artifact for production."
+        )
         return 0
 
     if args.command == "fit-calibration":

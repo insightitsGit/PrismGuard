@@ -1,0 +1,54 @@
+{
+  "artifact_id": "prism-pi-healthcare-v1",
+  "trained_at": "2026-07-24T01:42:16.761097+00:00",
+  "accuracy": 0.865,
+  "f1_injection": 0.8563829787234043,
+  "train_size": 3600,
+  "eval_size": 400,
+  "base_model": "ProtectAI/deberta-v3-base-prompt-injection",
+  "max_length": 256,
+  "corpus": {
+    "profile": "full",
+    "total_examples": 4000,
+    "injection_examples": 2057,
+    "benign_examples": 1943,
+    "sources": {
+      "healthcare-overlay": 15,
+      "healthcare-train": 5,
+      "neuralchemy-core-train": 793,
+      "s-labs-test": 373,
+      "s-labs-validation": 351,
+      "neuralchemy-core-validation": 167,
+      "s-labs-train": 1974,
+      "yanismiraoui-prompt-injections": 180,
+      "neuralchemy-core-test": 136,
+      "seed-v0": 5,
+      "mined-slabs": 1
+    },
+    "categories": {
+      "direct_instruction_override": 384,
+      "roleplay_jailbreak": 64,
+      "data_exfiltration_via_output": 14,
+      "system_prompt_exfiltration": 30,
+      "benign_adjacent": 1943,
+      "unclassified_imported": 1492,
+      "multi_turn_escalation": 6,
+      "encoding_obfuscation": 44,
+      "indirect_injection": 13,
+      "context_overflow": 7,
+      "refusal_suppression": 1,
+      "payload_splitting": 2
+    },
+    "fingerprint": "261ad94e563d79d8",
+    "built_at": "2026-07-24T00:35:33.463287+00:00"
+  },
+  "holdout_block_rate": 0.25,
+  "normal_allow_rate": 1.0,
+  "train_options": {
+    "class_weighted": false,
+    "focal_loss": false,
+    "holdout_early_stop": false
+  },
+  "calibration_temperature": 1.0,
+  "holdout_block_rate_calibrated": 0.25
+}

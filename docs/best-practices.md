@@ -13,8 +13,9 @@ Need local ONNX injection classifier?
   ├─ Production / agent UX latency → light (#2)
   └─ Scorecard / never-skip-model   → heavy (#3)
 
-Claim "learns from corpus / our words"?
-  └─ law_pilot + [prism] + FEEDBACK_PERSIST (#5–#6)
+Claim "learns from corpus / our words" or better PI on a vertical?
+  └─ train (or starter) for THAT domain → domain_pilot + [prism] (#5–#6)
+     Taxonomy is NOT law-only. law_pilot = deprecated alias for domain=law only.
      DB persistence → Team+ (#9)
 
 ChorusGraph / agent graph?
@@ -33,7 +34,7 @@ ChorusGraph / agent graph?
 **Don’t**
 - Cite law scorecard / COMPARISON_REPORT numbers from this path.
 - Force `PRISMGUARD_USE_ONNX=1` with `prism-pi-v1` on hub FAQ until a hub artifact passes gates.
-- Use `law_pilot` + ONNX as the primary ingress for customer FX / FAQ / finance chat (that path is for learn/scorecard loops).
+- Use law `prism-pi-v1` / bare `law_pilot` as the primary ingress for customer FX / FAQ / finance chat.
 
 **Example:** [`examples/01_hub_web_chat.py`](../examples/01_hub_web_chat.py)
 
@@ -64,19 +65,23 @@ ChorusGraph / agent graph?
 
 **Example:** [`examples/03_heavy_onnx.py`](../examples/03_heavy_onnx.py)
 
-### #5–#6 Learn-from-seed
+### #5–#6 Learn-from-seed / any domain after train
 
 **Do**
 - Install `prismguard[guard-model,prism]`.
-- Use `law_pilot` + `use_onnx=True` (not `light`/`heavy`).
+- **Any domain (your system):** label traffic → `prismguard-model train --domain-pack <slug> --artifact-id prism-pi-<slug>-v1` → `create_checker_for_app("domain_pilot", domain="<slug>", use_onnx=True)` with matching `PRISMGUARD_ARTIFACT_ID`.
+- **Optional starters** (`prismguard-model download --domain law|finance|healthcare`): for users **without** a DB yet. **No accuracy guarantee** on production traffic — retrain when you have feedback. See [`docs/default-artifacts.md`](default-artifacts.md).
 - Set `PRISMGUARD_FEEDBACK_PERSIST=1`, review queue, then export → train.
-- Verify `prismguard caps --profile law_pilot` shows `prismrag_taxonomy: True`.
+- Verify `prismguard caps --profile domain_pilot` (with `PRISMGUARD_DOMAIN`) shows `prismrag_taxonomy: True`.
+- Law-only compat: `law_pilot` = deprecated alias for `domain_pilot` + `domain=law`.
 
 **Don’t**
+- Invent `finance_pilot` / `healthcare_pilot` / per-vertical pilots.
+- Tell finance integrators to use `law_pilot` (use `domain_pilot` + finance artifact).
 - Market “learns from your DB” on memory-only installs without Team+ storage (#9).
 - Import holdout YAML into production seed.
 
-**Example:** [`examples/04_learn_from_seed.py`](../examples/04_learn_from_seed.py)
+**Example:** [`examples/chorusgraph_domain_guard.py`](../examples/chorusgraph_domain_guard.py), [`examples/04_learn_from_seed.py`](../examples/04_learn_from_seed.py)
 
 ### #7 Shadow ONNX
 
@@ -97,16 +102,43 @@ ChorusGraph / agent graph?
 
 **Don’t**
 - Set `PRISMGUARD_USE_ONNX=1` process-wide for hub agents (law artifact FPs on FX).
-- Put `law_pilot` on customer finance ingress.
+- Put `law_pilot` (or law `prism-pi-v1`) on customer finance ingress.
 - Paste FAQ / policy corpora into the user `message` when ChorusGraph compound routing is enabled — use conversation history or retrieval instead.
 
 ### Finance agent pack (ChorusGraph + Shine)
 
-Measured on FinancePackBench smoke (2026-07-22): mis-wiring (`PRISMGUARD_USE_ONNX=1` / `law_pilot` on ingress) → FX `guard_model_first` blocks and collapsed task success; best practice (`web_chat` ONNX off + shadow light + Shine finance) → task/PI 100% on that smoke set (n=5 — illustrative).
+Measured on FinancePackBench smoke (2026-07-22): mis-wiring (`PRISMGUARD_USE_ONNX=1` / **law** `prism-pi-v1` / `law_pilot` on ingress) → FX `guard_model_first` blocks and collapsed task success. Hub UX best practice remains `#1` `web_chat` ONNX off (+ optional `#7` shadow).
 
-Agent rule: **hub UX ≠ scorecard path.** Pick `#1` (+ optional `#7` shadow) for customer finance agents; pick `#2`/`#3`/`#5` only when you intentionally accept higher false-positive risk or are running a security bench.
+**Any new domain → train → `domain_pilot`.** Default ONNX `prism-pi-v1` is law-calibrated. For finance PI bake-offs:
 
-**Examples:** [`chorusgraph_hub_guard.py`](../examples/chorusgraph_hub_guard.py), [`chorusgraph_law_guard.py`](../examples/chorusgraph_law_guard.py), [`05_shadow_onnx.py`](../examples/05_shadow_onnx.py)
+```powershell
+# Train (holdouts stay out of train)
+prismguard-model train `
+  --domain-pack finance `
+  --artifact-id prism-pi-finance-v1 `
+  --feedback-jsonl C:\code\FinancePackBench\training\finance_guard\finance_feedback.jsonl `
+  --normal-txt C:\code\FinancePackBench\training\finance_guard\finance_benign.txt `
+  --holdout-domain finance --class-weighted --focal-loss
+
+# PI suite (canonical)
+$env:PRISMGUARD_DOMAIN = "finance"
+$env:PRISMGUARD_ARTIFACT_ID = "prism-pi-finance-v1"
+$env:PRISMGUARD_GUARD_MODEL_PATH = "C:\code\PrismGaurd\prismguard\models\artifacts\prism-pi-finance-v1"
+$env:PRISMGUARD_USE_ONNX = "1"
+$env:FINANCEPACK_GUARD_DOMAIN = "finance"
+$env:FINANCEPACK_GUARD_PI_PROFILE = "domain_pilot"
+$env:FINANCEPACK_GUARD_USE_ONNX = "1"
+```
+
+```python
+create_checker_for_app("domain_pilot", domain="finance", use_onnx=True)
+```
+
+Gates before claiming finance PI: holdout attacks ≥16/20 block; FX/FAQ benigns (incl. `USD to EUR`) allow. Disclose `domain` + `artifact_id` + profile on every COMPARISON_REPORT. See `AGENTS.md` Domain ↔ artifact lock.
+
+Agent rule: **hub UX ≠ scorecard path.** Hub → `#1`; finance PI / learn → `#5 domain_pilot` + finance artifact — never law ONNX on finance traffic. Do **not** invent `finance_pilot`.
+
+**Examples:** [`chorusgraph_domain_guard.py`](../examples/chorusgraph_domain_guard.py), [`chorusgraph_hub_guard.py`](../examples/chorusgraph_hub_guard.py), [`05_shadow_onnx.py`](../examples/05_shadow_onnx.py)
 
 ### #12 Output scan
 
@@ -119,7 +151,7 @@ Agent rule: **hub UX ≠ scorecard path.** Pick `#1` (+ optional `#7` shadow) fo
 ### #13 Verify
 
 ```bash
-prismguard caps --profile light|heavy|law_pilot|web_chat
+prismguard caps --profile light|heavy|domain_pilot|web_chat
 python scripts/compare_profiles.py          # which profile wins on your machine
 python scripts/s1_miss_analysis.py --profile light --attacks YOUR_SET
 ```
@@ -133,7 +165,7 @@ There is no single winner — optimize for the goal:
 | Lowest hub FP | `web_chat` | No law ONNX on FAQ |
 | Best stack latency (near-top quality) | `light` | Hybrid skips ONNX on rule hits |
 | Max attack block / scorecard parity | `heavy` | Always-on classifier (same F1 as light on many rule-heavy sets; higher mean latency) |
-| Learn from customer words | `law_pilot`+`[prism]` | Taxonomy + feedback loop |
+| Learn from customer words / vertical PI | **Train first** → then `domain_pilot`+`[prism]` + matching artifact | Domain ONNX + taxonomy; closed feedback→retrain loop |
 
 ### Measured on this repo’s compare set (2026-07-20, local CPU)
 

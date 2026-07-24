@@ -233,7 +233,9 @@ def test_classifier_first_tier1_returns_without_waiting_for_slow_classifier() ->
     assert result.decision == "block"
     assert guard.call_count == 1
     assert elapsed_ms < guard._inner.delay_s * 1000 * 0.5  # type: ignore[attr-defined]
-    assert result.details.get("classifier_invoked") is True
+    # classifier-first starts ONNX but does not await when Tier-1 already blocks
+    assert result.details.get("classifier_started") is True
+    assert result.details.get("classifier_awaited") is False
 
 
 def test_classifier_first_fast_allow_skips_fusion() -> None:

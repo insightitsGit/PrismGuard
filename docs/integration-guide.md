@@ -15,7 +15,7 @@ Examples + do/don’t: [`examples/README.md`](../examples/README.md) · [`best-p
 | Profile / env | Behavior |
 |---------------|----------|
 | `create_checker_for_app("web_chat")` | Rules + structural, HashEmbedder, **no ONNX**, fail-open gray — **hub/FAQ; not the scorecard path** |
-| `create_checker_for_app("law_pilot")` | Law domain pack; ONNX if `PRISMGUARD_USE_ONNX=1` or `use_onnx=True`. **Only profile that builds prismrag taxonomy** when `[prism]` is installed |
+| `create_checker_for_app("domain_pilot", domain=…)` | **Any domain after train**; taxonomy when `[prism]` installed; ONNX if `use_onnx=True` / `PRISMGUARD_USE_ONNX=1` + matching `PRISMGUARD_ARTIFACT_ID`. `law_pilot` = deprecated alias → `domain_pilot` + `domain=law` |
 | `create_checker_for_app("heavy")` / `"security_bench"` | **Heavy ONNX** — always-on (`first`). Scorecard / max coverage; ~350–500 ms. Loud if weights missing |
 | `create_checker_for_app("light")` / `"low_latency"` | **Light ONNX** — selective (`hybrid`). Production/stack latency; rules/structural first. Loud if weights missing |
 | `create_checker_for_app("sidecar")` | HTTP-oriented; HashEmbedder by default; ONNX opt-in |
@@ -32,7 +32,7 @@ Examples + do/don’t: [`examples/README.md`](../examples/README.md) · [`best-p
 | Tradeoff | Relies on Tier-1/structural coverage for short-circuits | Pays ONNX latency on easy prompts too |
 | Pick for | Production UX, PrismShine stacks | Security benches, holdout methodology |
 
-Both require the same `prismguard-model download`. Neither enables prismrag taxonomy — use `law_pilot`+`[prism]` for learn-from-seed.
+Both require the same `prismguard-model download`. Neither enables prismrag taxonomy — use `domain_pilot`+`[prism]` + domain train for learn-from-seed.
 
 | `PRISMGUARD_ARTIFACT_ID` | **Opt-in** artifact id (default: triage/`prism-pi-v1`). Use `prism-pi-hub-v1` after hub gates |
 | `PRISMGUARD_GUARD_MODEL_PATH` | **Opt-in** absolute artifact dir (overrides id) |
@@ -50,7 +50,7 @@ Both require the same `prismguard-model download`. Neither enables prismrag taxo
 **Without `[prism]`:** seed overlay text can still be stored, but **taxonomy / word-graph is skipped**. Do not claim “learns from your corpus” on that path.
 
 ```bash
-prismguard caps --profile law_pilot   # onnx_ready, prismrag_taxonomy, feedback_persist, …
+prismguard caps --profile domain_pilot   # onnx_ready, prismrag_taxonomy, feedback_persist, …
 ```
 
 ### Core rules vs domain pack vs holdout
@@ -58,7 +58,7 @@ prismguard caps --profile law_pilot   # onnx_ready, prismrag_taxonomy, feedback_
 | Layer | What it is | When loaded |
 |-------|------------|-------------|
 | **Core rules** | Bundled authored seed (`seed.yaml`) + structural heuristics | Always |
-| **Domain pack** | Overlay under `prismguard/domains/<name>/` (entries + optional triage) | Only when `PRISMGUARD_DOMAIN=<name>` or `law_pilot` |
+| **Domain pack** | Overlay under `prismguard/domains/<name>/` (entries + optional triage) | When `PRISMGUARD_DOMAIN=<name>` or `domain_pilot` / `law_pilot` alias |
 | **Holdout** | Eval-only YAML (`holdout.yaml`) | Never seeded into runtime; used by eval/benchmarks |
 
 ## Library (recommended for hubs)
@@ -158,15 +158,15 @@ feedback persist            →  export JSONL → corpus-plan → train → arti
 | Step | How | Tier |
 |------|-----|------|
 | Install taxonomy stack | `pip install "prismguard[guard-model,prism]"` | OSS |
-| Factory | `create_checker_for_app("law_pilot", use_onnx=True)` — **not** `security_bench` | OSS |
-| Domain words | `PRISMGUARD_DOMAIN=law` (implied by `law_pilot`) | OSS |
+| Factory | `create_checker_for_app("domain_pilot", domain=…, use_onnx=True)` — **not** `security_bench` | OSS |
+| Domain words | `PRISMGUARD_DOMAIN=<domain>` (required for bare `domain_pilot`; `law_pilot` implies law) | OSS |
 | ONNX | `prismguard-model download` + `PRISMGUARD_USE_ONNX=1` | OSS |
 | Feedback | `PRISMGUARD_FEEDBACK_PERSIST=1` → `prismguard feedback export` → `prismguard-model train` | OSS |
 | Persistent DB seed/feedback | `PRISMGUARD_STORAGE_BACKEND=pgvector` + `PRISMGUARD_STORAGE_DSN` + license | **Team+** |
 | Tenant lexicon | `PRISMGUARD_TENANT_LEXICON_PATH=/path/to/lexicon.yaml` | path OSS / production **Business+** |
 
 **Never** label memory-only + rules-only as “learns from your DB.”  
-Verify: `prismguard caps --profile law_pilot` → `prismrag_taxonomy`, `feedback_persist`, `storage_backend`.
+Verify: `prismguard caps --profile domain_pilot` → `prismrag_taxonomy`, `feedback_persist`, `storage_backend`.
 
 ## Customer / hub ONNX path (opt-in)
 
@@ -203,7 +203,7 @@ Hub maintainer shortcut: `python scripts/train_prism_pi_hub.py` (builds `prism-p
 
 ## Production standards checklist
 
-- [ ] Prefer `create_checker_for_app("web_chat")` for product hubs; use `law_pilot` for legal / learn-from-seed
+- [ ] Prefer `create_checker_for_app("web_chat")` for product hubs; use `domain_pilot` after domain train for learn-from-seed / PI bake-offs
 - [ ] Run `prismguard caps` and confirm capabilities match the claim (scorecard vs learn vs hub)
 - [ ] Keep `PRISMGUARD_USE_ONNX` unset until hub/customer FAQ FP gate is green
 - [ ] Install `[prism]` before claiming word-graph / learn-from-seed

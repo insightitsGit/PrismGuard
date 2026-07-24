@@ -8,7 +8,8 @@ from typing import Any, Literal
 
 AppProfile = Literal[
     "web_chat",
-    "law_pilot",
+    "domain_pilot",
+    "law_pilot",  # deprecated alias → domain_pilot + domain=law
     "sidecar",
     "rules_only",
     "security_bench",
@@ -29,7 +30,11 @@ _PROFILE_ALIASES: dict[str, AppProfile] = {
     "onnx_light": "low_latency",
     "onnx_first": "security_bench",
     "onnx_hybrid": "low_latency",
+    # Deprecated: law_pilot → domain_pilot (domain defaults to law)
+    "law_pilot": "domain_pilot",
 }
+
+_TAXONOMY_PROFILES = frozenset({"domain_pilot"})
 
 _SINGLETONS: dict[str, Any] = {}
 _SINGLETON_LOCK = threading.Lock()
@@ -51,8 +56,15 @@ def onnx_opt_in() -> bool:
     return env_flag("PRISMGUARD_USE_ONNX", default=False)
 
 
-def create_checker_rules_only(*, seed_profile: str | None = None) -> Any:
-    """Fast offline checker: memory storage, authored seed, HashEmbedder, no ONNX, no HF."""
+def create_checker_rules_only(
+    *,
+    seed_profile: str | None = None,
+    domain: str | None = None,
+) -> Any:
+    """Fast offline checker: memory storage, authored seed, HashEmbedder, no ONNX, no HF.
+
+    Optional ``domain`` (or ``PRISMGUARD_DOMAIN``) loads that pack's overlay — any slug.
+    """
     from prismguard.config.loader import TriageConfig, load_triage_config
     from prismguard.runtime.check import RuntimeChecker
     from prismguard.seed import import_bundled_seed, load_bundled_seed
@@ -60,12 +72,25 @@ def create_checker_rules_only(*, seed_profile: str | None = None) -> Any:
     from prismguard.taxonomy.embedder import HashEmbedder
 
     profile = seed_profile or os.environ.get("PRISMGUARD_SEED_PROFILE", "authored")
+    resolved = domain if domain is not None else _default_domain()
     storage = create_storage("memory")
     parsed = load_bundled_seed(profile=profile)  # type: ignore[arg-type]
     import_bundled_seed(storage, profile=profile, skip_taxonomy=True)  # type: ignore[arg-type]
+    if resolved:
+        from prismguard.domains.registry import get_domain_pack
+        from prismguard.seed import import_seeds
+        from prismguard.seed.parse import parse_seed_file
+
+        overlay_path = get_domain_pack(resolved).overlay_path
+        import_seeds(
+            storage,
+            parse_seed_file(overlay_path),
+            mode="update",
+            skip_taxonomy=True,
+        )
 
     try:
-        cfg = load_triage_config(domain=None)
+        cfg = load_triage_config(domain=resolved)
     except Exception:
         cfg = TriageConfig()
     cfg = cfg.model_copy(
@@ -77,7 +102,7 @@ def create_checker_rules_only(*, seed_profile: str | None = None) -> Any:
             "guard_model": cfg.guard_model.model_copy(update={"enabled": False}),
         }
     )
-    return RuntimeChecker.from_storage(
+    checker = RuntimeChecker.from_storage(
         storage,
         parsed,
         embedder=HashEmbedder(),
@@ -85,6 +110,8 @@ def create_checker_rules_only(*, seed_profile: str | None = None) -> Any:
         guard_model=None,
         llm_judge=None,
     )
+    checker._domain = resolved  # noqa: SLF001
+    return checker
 
 
 def resolve_classifier_mode(
@@ -111,9 +138,42 @@ def resolve_classifier_mode(
 
 
 def normalize_app_profile(profile: str) -> AppProfile:
-    """Map aliases (``heavy`` / ``light``) to canonical profile names."""
+    """Map aliases (``heavy`` / ``light`` / ``law_pilot``) to canonical profile names."""
     key = (profile or "").strip().lower()
     return _PROFILE_ALIASES.get(key, key)  # type: ignore[return-value]
+
+
+def resolve_domain_pilot_domain(
+    domain: str | None,
+    *,
+    requested_profile: str,
+) -> str:
+    """
+    Domain for ``domain_pilot``.
+
+    Order: ``law_pilot`` alias always → ``law``; else kwarg ``domain=`` →
+    ``PRISMGUARD_DOMAIN`` → raise (no silent law default for bare domain_pilot).
+    """
+    if requested_profile.strip().lower() == "law_pilot":
+        return "law"
+    if domain is not None and str(domain).strip():
+        key = str(domain).strip().lower()
+        if key in ("none", "core", "-"):
+            raise ValueError(
+                "domain_pilot requires a concrete domain pack "
+                f"(got {domain!r}). Pass domain='finance'|'law'|… "
+                "or set PRISMGUARD_DOMAIN."
+            )
+        return key
+    env = os.environ.get("PRISMGUARD_DOMAIN", "").strip()
+    if env and env.lower() not in ("none", "core", "-"):
+        # Accept "general" here — it is a real domain pack for domain_pilot.
+        return env.lower()
+    raise ValueError(
+        "domain_pilot requires domain=... or PRISMGUARD_DOMAIN. "
+        "Example: create_checker_for_app('domain_pilot', domain='finance', use_onnx=True). "
+        "Legacy create_checker_for_app('law_pilot') defaults domain=law."
+    )
 
 
 def create_checker_for_app(
@@ -133,14 +193,14 @@ def create_checker_for_app(
     web_chat / rules_only
         ONNX off by default, HashEmbedder, no corpus ANN, fail_open gray policy.
         Hub / FAQ path — do **not** compare to the published law scorecard.
+    domain_pilot
+        **Canonical learn-from-seed / taxonomy path for any domain after train.**
+        Requires ``domain=`` or ``PRISMGUARD_DOMAIN``. Builds prismrag taxonomy when
+        ``[prism]`` is installed and not offline. Pair with
+        ``PRISMGUARD_ARTIFACT_ID=prism-pi-<domain>-v1`` + ``use_onnx=True``.
+        Do **not** invent ``finance_pilot`` / ``healthcare_pilot``.
     law_pilot
-        Law domain pack + ONNX when ``PRISMGUARD_USE_ONNX=1`` or ``use_onnx=True``.
-        Soft: may degrade to rules if weights missing. YAML ``classifier_mode``
-        (default ``first``) unless overridden via ``classifier_mode=`` /
-        ``PRISMGUARD_CLASSIFIER_MODE``.
-        **Prefer this for learn-from-seed / word-graph:** with ``pip install
-        "prismguard[prism]"`` and without ``PRISMGUARD_OFFLINE``, seed import
-        builds prismrag taxonomy. Pair with ``PRISMGUARD_FEEDBACK_PERSIST=1``.
+        **Deprecated alias** for ``domain_pilot`` + ``domain=\"law\"`` (compat).
     heavy / security_bench
         **Heavy ONNX** — always-on classifier (``classifier_mode: first``).
         Max injection coverage / scorecard parity; ~350–500 ms floor.
@@ -155,12 +215,22 @@ def create_checker_for_app(
 
     See also: ``prismguard.runtime.capabilities.guard_capabilities`` / ``prismguard caps``.
     """
-    profile = normalize_app_profile(profile)
+    requested = (profile or "").strip().lower()
+    # Reject per-domain pilot inventions early (clearer than AppProfile type errors).
+    if requested.endswith("_pilot") and requested not in ("domain_pilot", "law_pilot"):
+        raise ValueError(
+            f"Unknown profile {profile!r}. Use create_checker_for_app('domain_pilot', "
+            "domain='<domain>', use_onnx=True) after train — do not invent "
+            "finance_pilot / healthcare_pilot / per-vertical pilots."
+        )
+    canonical = normalize_app_profile(profile)
 
-    if profile in ("web_chat", "rules_only"):
-        checker = create_checker_rules_only(seed_profile=seed_profile)
+    if canonical in ("web_chat", "rules_only"):
+        # Honor domain= / PRISMGUARD_DOMAIN for overlay + structural packs (any slug).
+        resolved_hub = domain if domain is not None else _default_domain()
+        checker = create_checker_rules_only(seed_profile=seed_profile, domain=resolved_hub)
         if shadow_onnx or (shadow_onnx is None and env_flag("PRISMGUARD_SHADOW_ONNX")):
-            return _wrap_shadow_onnx(checker, domain=domain or "law")
+            return _wrap_shadow_onnx(checker, domain=resolved_hub or "")
         if use_onnx is True or (use_onnx is None and onnx_opt_in()):
             # Explicit opt-in on web_chat still allowed for experiments.
             return _rebuild_with_onnx(
@@ -172,24 +242,42 @@ def create_checker_for_app(
             )
         return checker
 
-    if profile == "security_bench":
+    if canonical == "security_bench":
         return _create_security_bench_checker(
+            domain=domain,
             seed_profile=seed_profile,
             classifier_mode=classifier_mode,
         )
 
-    if profile == "low_latency":
+    if canonical == "low_latency":
         return _create_low_latency_checker(
+            domain=domain,
             seed_profile=seed_profile,
             classifier_mode=classifier_mode,
         )
 
+    if canonical == "domain_pilot":
+        resolved = resolve_domain_pilot_domain(domain, requested_profile=requested)
+        # Ensure pack exists early (clearer error than mid-import).
+        from prismguard.domains.registry import get_domain_pack
+
+        get_domain_pack(resolved)
+        return _build_full_checker(
+            domain=resolved,
+            seed_profile=seed_profile,
+            use_onnx=use_onnx,
+            shadow_onnx=bool(shadow_onnx) if shadow_onnx is not None else env_flag("PRISMGUARD_SHADOW_ONNX"),
+            force_hash_embedder=offline_mode(),
+            classifier_mode=resolve_classifier_mode(classifier_mode),
+        )
+
+    # sidecar / unknown full-stack profiles
     return _build_full_checker(
-        domain=domain if domain is not None else ("law" if profile == "law_pilot" else _default_domain()),
+        domain=domain if domain is not None else _default_domain(),
         seed_profile=seed_profile,
         use_onnx=use_onnx,
         shadow_onnx=bool(shadow_onnx) if shadow_onnx is not None else env_flag("PRISMGUARD_SHADOW_ONNX"),
-        force_hash_embedder=offline_mode() or profile != "law_pilot",
+        force_hash_embedder=offline_mode() or canonical != "domain_pilot",
         classifier_mode=resolve_classifier_mode(classifier_mode),
     )
 
@@ -209,16 +297,35 @@ def _require_onnx_ready(checker: Any, *, profile: str) -> Any:
     return checker
 
 
+def _resolve_onnx_profile_domain(domain: str | None) -> str | None:
+    """Domain for light/heavy: kwarg → env → None (core, no overlay).
+
+    Scorecard methodology historically used law; callers may still pass
+    ``domain='law'`` or set ``PRISMGUARD_DOMAIN=law``. Custom domains are OK
+    when the matching ``PRISMGUARD_ARTIFACT_ID`` is set.
+    """
+    if domain is not None and str(domain).strip():
+        key = str(domain).strip().lower()
+        if key not in ("none", "core", "-"):
+            return key
+    return _default_domain()
+
+
 def _create_security_bench_checker(
     *,
+    domain: str | None = None,
     seed_profile: str | None = None,
     classifier_mode: ClassifierMode | str | None = None,
 ) -> Any:
-    """Law + ONNX + classifier_mode first; fail loudly if weights missing."""
+    """ONNX + classifier_mode first; fail loudly if weights missing.
+
+    Domain defaults to env / unset (core). Pass ``domain='law'`` for the classic
+    law scorecard path.
+    """
     os.environ["PRISMGUARD_USE_ONNX"] = "1"
     mode = resolve_classifier_mode(classifier_mode, profile_default="first")
     checker = _build_full_checker(
-        domain="law",
+        domain=_resolve_onnx_profile_domain(domain),
         seed_profile=seed_profile,
         use_onnx=True,
         shadow_onnx=False,
@@ -230,14 +337,18 @@ def _create_security_bench_checker(
 
 def _create_low_latency_checker(
     *,
+    domain: str | None = None,
     seed_profile: str | None = None,
     classifier_mode: ClassifierMode | str | None = None,
 ) -> Any:
-    """Law + ONNX + hybrid (skip ONNX on tier1/structural); fail loud if weights missing."""
+    """ONNX + hybrid (skip ONNX on tier1/structural); fail loud if weights missing.
+
+    Domain defaults to env / unset (core). Pass ``domain=`` for a vertical overlay.
+    """
     os.environ["PRISMGUARD_USE_ONNX"] = "1"
     mode = resolve_classifier_mode(classifier_mode, profile_default="hybrid")
     checker = _build_full_checker(
-        domain="law",
+        domain=_resolve_onnx_profile_domain(domain),
         seed_profile=seed_profile,
         use_onnx=True,
         shadow_onnx=False,
@@ -256,24 +367,23 @@ def create_checker_from_env() -> Any:
 
     Default (no ``PRISMGUARD_APP_PROFILE``): dogfood ``web_chat`` / rules-first path so
     ``prismguard check`` works on a bare ``pip install prismguard`` without ``[prism]``.
-    Set ``PRISMGUARD_APP_PROFILE=sidecar`` or ``law_pilot`` for the full stack.
+    Set ``PRISMGUARD_APP_PROFILE=sidecar`` or ``domain_pilot`` for the full stack.
     """
-    profile = os.environ.get("PRISMGUARD_APP_PROFILE", "").strip().lower()
-    if not profile:
+    requested = os.environ.get("PRISMGUARD_APP_PROFILE", "").strip().lower()
+    if not requested:
         # Base install / CLI headline path — rules-first, no surprise prismrag hard-fail.
-        profile = "web_chat"
-    profile = normalize_app_profile(profile)
-    if profile in (
+        requested = "web_chat"
+    canonical = normalize_app_profile(requested)
+    if canonical in (
         "web_chat",
         "rules_only",
-        "law_pilot",
+        "domain_pilot",
         "sidecar",
         "security_bench",
         "low_latency",
-        "heavy",
-        "light",
-    ):
-        return get_or_create_checker(profile)  # type: ignore[arg-type]
+    ) or requested in ("law_pilot", "heavy", "light"):
+        # Pass requested so law_pilot keeps domain=law default.
+        return get_or_create_checker(requested)  # type: ignore[arg-type]
     return _build_full_checker(
         domain=_default_domain(),
         seed_profile=os.environ.get("PRISMGUARD_SEED_PROFILE", "authored"),
@@ -286,17 +396,19 @@ def create_checker_from_env() -> Any:
 
 def get_or_create_checker(profile: AppProfile = "web_chat") -> Any:
     """Thread-safe process singleton for app workers."""
+    requested = (profile or "").strip().lower()
     profile = normalize_app_profile(profile)
     mode = os.environ.get("PRISMGUARD_CLASSIFIER_MODE", "")
     key = (
-        f"{profile}:{os.environ.get('PRISMGUARD_DOMAIN', '')}:"
+        f"{profile}:{requested}:{os.environ.get('PRISMGUARD_DOMAIN', '')}:"
         f"{onnx_opt_in()}:{offline_mode()}:{mode}"
     )
     with _SINGLETON_LOCK:
         existing = _SINGLETONS.get(key)
         if existing is not None:
             return existing
-        checker = create_checker_for_app(profile)
+        # Preserve law_pilot request so domain defaults to law when env unset.
+        checker = create_checker_for_app(requested if requested == "law_pilot" else profile)  # type: ignore[arg-type]
         _SINGLETONS[key] = checker
         return checker
 
@@ -307,6 +419,11 @@ def clear_checker_singletons() -> None:
 
 
 def _default_domain() -> str | None:
+    """Sidecar/env default domain. Empty/general/core → None (no overlay).
+
+    ``domain_pilot`` uses :func:`resolve_domain_pilot_domain` instead (accepts
+    ``general`` as a real pack when explicitly requested).
+    """
     raw = os.environ.get("PRISMGUARD_DOMAIN", "").strip()
     if not raw or raw.lower() in ("none", "general", "core", "-"):
         return None
@@ -432,7 +549,12 @@ def _build_full_checker(
         feedback_review=feedback_review,
     )
     if shadow_onnx and want_onnx:
-        return _ShadowOnnxChecker(checker, domain=domain or "law")
+        return _ShadowOnnxChecker(checker, domain=domain or "")
+    # Stash active domain for structural pack gating (any custom slug).
+    try:
+        checker._domain = domain  # noqa: SLF001
+    except Exception:
+        pass
     return checker
 
 
@@ -456,7 +578,7 @@ def _rebuild_with_onnx(
 
 
 def _wrap_shadow_onnx(rules_checker: Any, *, domain: str) -> Any:
-    return _ShadowOnnxChecker(rules_checker, domain=domain)
+    return _ShadowOnnxChecker(rules_checker, domain=domain or "")
 
 
 class _ShadowOnnxChecker:
@@ -475,7 +597,7 @@ class _ShadowOnnxChecker:
             from prismguard.runtime.guard_model import create_guard_model
             from prismguard.config.loader import load_triage_config
 
-            cfg = load_triage_config(domain=self._domain)
+            cfg = load_triage_config(domain=self._domain or None)
             self._shadow = create_guard_model(cfg.guard_model)
             if self._shadow is None:
                 self._shadow_error = "shadow ONNX not ready"

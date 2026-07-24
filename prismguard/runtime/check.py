@@ -23,7 +23,7 @@ from prismguard.runtime.llm_judge import LLMJudge
 from prismguard.runtime.normalize import normalize_prompt
 from prismguard.runtime.session import SessionStore, create_session_store
 from prismguard.runtime.stage_profiler import StageProfiler
-from prismguard.runtime.structural import analyze_structural
+from prismguard.runtime.structural import active_vertical_packs, analyze_structural
 from prismguard.runtime.verdict_cache import content_address, get_verdict_cache, rule_version_snapshot
 from prismguard.runtime.thresholds import resolve_thresholds
 from prismguard.storage.protocols import StorageBackend
@@ -160,6 +160,7 @@ class RuntimeChecker:
             max_workers=max(1, int(os.environ.get("PRISMGUARD_CLASSIFIER_WORKERS", "2"))),
             thread_name_prefix="prismguard-clf",
         )
+        self._domain: str | None = None
         self._local_metrics = {
             "check_total": 0,
             "check_allow": 0,
@@ -439,6 +440,18 @@ class RuntimeChecker:
         with profiler.section("classifier"):
             return future.result()
 
+    def _resolved_domain(self) -> str | None:
+        domain = getattr(self, "_domain", None)
+        if domain is not None and str(domain).strip():
+            return str(domain).strip()
+        env_dom = os.environ.get("PRISMGUARD_DOMAIN", "").strip()
+        if env_dom and env_dom.lower() not in ("none", "core", "-"):
+            return env_dom
+        return None
+
+    def _law_pack_active(self) -> bool:
+        return "law" in active_vertical_packs(self._resolved_domain())
+
     def _classifier_disagrees_with_structural_allow(
         self,
         verdict: GuardModelVerdict | None,
@@ -585,7 +598,11 @@ class RuntimeChecker:
             from prismguard.runtime.structural import is_legal_topic_fragment
 
             attack_score = float(getattr(structural, "attack_score", 0.0) or 0.0)
-            if attack_score < 0.35 and is_legal_topic_fragment(normalized):
+            if (
+                self._law_pack_active()
+                and attack_score < 0.35
+                and is_legal_topic_fragment(normalized)
+            ):
                 return None
         details = {
             **self._classifier_details(verdict),
@@ -684,9 +701,10 @@ class RuntimeChecker:
         if verdict.decision == "block":
             from prismguard.runtime.structural import is_legal_topic_fragment
 
+            legal_soft = self._law_pack_active() and is_legal_topic_fragment(normalized)
             if (
                 self._uses_classifier_first()
-                and is_legal_topic_fragment(normalized)
+                and legal_soft
                 and verdict.confidence < self._config.guard_model.classifier_first_block_threshold
             ):
                 return CheckResult(
@@ -701,7 +719,7 @@ class RuntimeChecker:
                 )
             if (
                 self._uses_classifier_first()
-                and is_legal_topic_fragment(normalized)
+                and legal_soft
                 and verdict.confidence >= self._config.guard_model.classifier_first_block_threshold
             ):
                 return CheckResult(
@@ -1113,18 +1131,21 @@ class RuntimeChecker:
                 ),
             )
 
+        structural_domain = self._resolved_domain()
         if profiler is not None:
             with profiler.section("structural"):
                 structural = analyze_structural(
                     normalized,
                     block_threshold=self._config.structural.structural_block_threshold,
                     allow_threshold=self._config.structural.structural_allow_threshold,
+                    domain=structural_domain,
                 )
         else:
             structural = analyze_structural(
                 normalized,
                 block_threshold=self._config.structural.structural_block_threshold,
                 allow_threshold=self._config.structural.structural_allow_threshold,
+                domain=structural_domain,
             )
         if structural.decision == "block":
             return CheckResult(

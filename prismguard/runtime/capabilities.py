@@ -37,6 +37,7 @@ _PROFILE_CLASSIFIER_MODE = {
     "low_latency": "hybrid",  # light
     "web_chat": "off",
     "rules_only": "off",
+    "domain_pilot": "yaml_default(first)",
 }
 
 
@@ -45,11 +46,22 @@ def _default_profile() -> str:
     return raw or "web_chat"
 
 
-def _domain_overlay() -> str | None:
+def _domain_overlay(*, profile: str | None = None, requested: str | None = None) -> str | None:
+    req = (requested or "").strip().lower()
+    prof = profile or ""
+    # Deprecated alias always reports law — do not let PRISMGUARD_DOMAIN hijack it.
+    if req == "law_pilot":
+        return "law"
     raw = os.environ.get("PRISMGUARD_DOMAIN", "").strip()
-    if not raw or raw.lower() in ("none", "general", "core", "-"):
-        return None
-    return raw
+    if raw:
+        key = raw.lower()
+        if key not in ("none", "core", "-"):
+            if key == "general":
+                # Real pack for domain_pilot; historically unset for other profiles.
+                return "general" if prof in ("domain_pilot", "security_bench", "low_latency") else None
+            return key
+    # light/heavy with no env: core (no forced law overlay)
+    return None
 
 
 def _taxonomy_status(profile: str) -> tuple[bool, str]:
@@ -63,34 +75,28 @@ def _taxonomy_status(profile: str) -> tuple[bool, str]:
     if profile == "security_bench":
         return (
             False,
-            "heavy/security_bench forces HashEmbedder / skip_taxonomy - use law_pilot for learn-from-seed",
+            "heavy/security_bench forces HashEmbedder / skip_taxonomy - use domain_pilot for learn-from-seed",
         )
     if profile == "low_latency":
         return (
             False,
-            "light/low_latency forces HashEmbedder for speed - use law_pilot for learn-from-seed taxonomy",
+            "light/low_latency forces HashEmbedder for speed - use domain_pilot for learn-from-seed taxonomy",
         )
     if profile in ("web_chat", "rules_only"):
         return False, f"{profile} is rules-first (skip_taxonomy)"
     if profile == "sidecar":
-        return False, "sidecar defaults to HashEmbedder; use law_pilot for taxonomy"
-    if profile != "law_pilot":
-        # Unknown / custom — only law_pilot currently enables transformer taxonomy in factory.
+        return False, "sidecar defaults to HashEmbedder; use domain_pilot for taxonomy"
+    if profile != "domain_pilot":
         return False, f"profile {profile!r} does not enable taxonomy in create_checker_for_app"
     return True, ""
 
 
-def _onnx_artifact_ready() -> tuple[bool, str]:
+def _onnx_artifact_ready(*, domain: str | None = None) -> tuple[bool, str]:
     """Lightweight check: model.onnx present for configured artifact (no session load)."""
     try:
         from prismguard.config.loader import load_triage_config
         from prismguard.models.loader import resolve_artifact_dir
 
-        domain = _domain_overlay()
-        # law_pilot / security_bench imply law when domain unset
-        profile = _default_profile()
-        if domain is None and profile in ("law_pilot", "security_bench", "low_latency"):
-            domain = "law"
         cfg = load_triage_config(domain=domain)
         artifact_id = os.environ.get("PRISMGUARD_ARTIFACT_ID", "").strip()
         artifact_path = os.environ.get("PRISMGUARD_GUARD_MODEL_PATH", "").strip()
@@ -135,32 +141,40 @@ def guard_capabilities(
     requested = (profile or _default_profile()).strip().lower()
     prof = normalize_app_profile(requested)
     tax_ok, tax_reason = _taxonomy_status(prof)
+    domain = _domain_overlay(profile=prof, requested=requested)
     onnx_ready, onnx_detail = (False, "skipped")
     if probe_onnx:
-        onnx_ready, onnx_detail = _onnx_artifact_ready()
+        onnx_ready, onnx_detail = _onnx_artifact_ready(domain=domain)
 
     storage = os.environ.get("PRISMGUARD_STORAGE_BACKEND", "memory").strip() or "memory"
     persistent = storage.lower() not in ("memory", "")
     feedback = env_flag("PRISMGUARD_FEEDBACK_PERSIST", default=False)
-    domain = _domain_overlay()
-    if domain is None and prof in ("law_pilot", "security_bench", "low_latency"):
-        domain = "law"
     lex_ok, lex_detail = _tenant_lexicon_status()
 
     env_mode = os.environ.get("PRISMGUARD_CLASSIFIER_MODE", "").strip().lower()
     classifier_mode = env_mode or _PROFILE_CLASSIFIER_MODE.get(prof) or "yaml_default(first)"
 
     notes: list[str] = []
+    if prof == "domain_pilot" and not domain:
+        notes.append(
+            "domain_pilot requires domain= or PRISMGUARD_DOMAIN "
+            "(law_pilot alias defaults domain=law)."
+        )
+        tax_ok = False
+        tax_reason = tax_reason or "domain_pilot missing domain"
+    if requested == "law_pilot":
+        notes.append("law_pilot is a deprecated alias for domain_pilot + domain=law.")
     if not tax_ok:
         notes.append(
             "Without taxonomy, seed overlay text may be stored but word-graph / prismrag "
             f"taxonomy is skipped ({tax_reason})."
         )
     if not onnx_ready and (
-        onnx_opt_in() or prof in ("security_bench", "law_pilot", "low_latency")
+        onnx_opt_in() or prof in ("security_bench", "domain_pilot", "low_latency")
     ):
         notes.append(
-            "ONNX weights not ready - scorecard-class injection needs prismguard-model download."
+            "ONNX weights not ready - scorecard-class injection needs prismguard-model download "
+            "or PRISMGUARD_ARTIFACT_ID / PRISMGUARD_GUARD_MODEL_PATH for a domain artifact."
         )
     if persistent:
         notes.append("Persistent storage backends require Team+ license (PRISMGUARD_LICENSE_FILE).")
@@ -175,6 +189,12 @@ def guard_capabilities(
         notes.append(
             "LIGHT ONNX (low_latency): classifier_mode=hybrid - rules/structural first; "
             "ONNX only when needed. Switch to heavy for scorecard-class always-on coverage."
+        )
+    if prof == "domain_pilot":
+        notes.append(
+            "domain_pilot: after train use PRISMGUARD_ARTIFACT_ID=prism-pi-<domain>-v1 "
+            "+ create_checker_for_app('domain_pilot', domain=<domain>, use_onnx=True). "
+            "Do not invent finance_pilot / healthcare_pilot."
         )
     if classifier_mode == "first" and prof not in ("security_bench",):
         notes.append(

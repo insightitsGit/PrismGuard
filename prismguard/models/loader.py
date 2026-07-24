@@ -15,21 +15,30 @@ def default_artifacts_root() -> Path:
 
 
 def resolve_artifact_dir(config: GuardModelConfig) -> Path:
+    """Resolve ONNX artifact directory for the configured id — never swap domains.
+
+    Silent fallback to ``prism-pi-v1`` (law) when another artifact is missing is
+    forbidden: that mis-calibrates finance/healthcare/custom traffic.
+    """
     if config.artifact_path:
         return Path(config.artifact_path).expanduser().resolve()
     env_path = os.environ.get("PRISMGUARD_GUARD_MODEL_PATH", "").strip()
     if env_path:
         return Path(env_path).expanduser().resolve()
+    artifact_id = (config.artifact_id or "").strip() or "prism-pi-v1"
     try:
-        return ensure_artifact_ready(config.artifact_id, auto_download=True, progress=False)
+        return ensure_artifact_ready(artifact_id, auto_download=True, progress=False)
     except FileNotFoundError:
-        candidate = default_artifacts_root() / config.artifact_id
+        candidate = default_artifacts_root() / artifact_id
         if candidate.is_dir():
             return candidate
-        fallback = default_artifacts_root() / "prism-pi-v1"
-        if config.artifact_id != "prism-pi-v1" and fallback.is_dir():
-            return fallback
-        return candidate
+        raise FileNotFoundError(
+            f"ONNX artifact {artifact_id!r} not found under "
+            f"{default_artifacts_root()} or the download cache. "
+            "Train with `prismguard-model train --artifact-id …` or set "
+            "PRISMGUARD_GUARD_MODEL_PATH. Refusing to silently load prism-pi-v1 "
+            "for a different domain."
+        ) from None
 
 
 def load_corpus_manifest(artifact_dir: Path) -> dict | None:

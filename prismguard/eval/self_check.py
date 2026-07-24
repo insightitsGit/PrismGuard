@@ -5,8 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-os.environ.setdefault("PRISMGUARD_DOMAIN", "law")
-
+# Do not force law — verify respects PRISMGUARD_DOMAIN / core when unset.
 from prismguard.eval.probes import USER_VERIFY_ATTACK, USER_VERIFY_BENIGN
 
 # Obvious Tier-1 / structural attacks — must pass even on bare rules-only install.
@@ -55,7 +54,8 @@ def _checker_from_env():
     from prismguard.taxonomy.embedder import create_embedder_from_config
     from prismguard.taxonomy.mapping import has_prismrag
 
-    domain = os.environ.get("PRISMGUARD_DOMAIN", "law")
+    raw_domain = os.environ.get("PRISMGUARD_DOMAIN", "").strip()
+    domain = raw_domain if raw_domain and raw_domain.lower() not in ("none", "core", "-") else None
     storage = create_storage("memory")
     profile = os.environ.get("PRISMGUARD_SEED_PROFILE", "authored")
     parsed = load_bundled_seed(profile=profile)
@@ -89,7 +89,10 @@ def run_user_verify(*, skip_runtime: bool = False) -> VerifyReport:
     from prismguard.config.loader import load_triage_config
     from prismguard.runtime.factory import onnx_opt_in
 
-    cfg = load_triage_config(domain=os.environ.get("PRISMGUARD_DOMAIN", "law"))
+    raw = os.environ.get("PRISMGUARD_DOMAIN", "").strip()
+    cfg = load_triage_config(
+        domain=raw if raw and raw.lower() not in ("none", "core", "-") else None
+    )
     esc = cfg.guard_model.disagreement_escalation
     report.add("disagreement_escalation", esc, f"enabled={esc}")
 

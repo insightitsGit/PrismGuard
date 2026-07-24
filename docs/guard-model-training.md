@@ -160,19 +160,41 @@ Two learning loops:
 
 ### 5. Recommended training workflow
 
-**Defaults:** `prismguard-model train` uses the **bundled seed only**. Domain packs (`--domain-pack law|general|…`) and customer feedback are **opt-in**.
+**Defaults:** `prismguard-model train` uses the **bundled seed only**. Domain packs and customer feedback are **opt-in**. Bundled slugs (`law`, `finance`, `healthcare`, `general`) are **optional shortcuts** — any custom slug works (`acme_claims`, `support`, …).
 
 1. **Bootstrap** — `prismguard-model export` from ProtectAI DeBERTa (baseline, no training).
-2. **Law proof (opt-in pack)** — `prismguard-model train --law-pack` (alias for `--domain-pack law`) → `prism-pi-v1` style artifact; eval `--domain law`.
-3. **Customer / hub (opt-in)** — pilot with `PRISMGUARD_FEEDBACK_PERSIST=1` + optional `PRISMGUARD_SHADOW_ONNX=1` → `prismguard feedback export` → `train --feedback-jsonl … --domain-pack general --normal-txt benchmark/hub/benign_faq.txt`.
-4. **Plan first** — `prismguard-model corpus-plan` (dry-run sources/fingerprint; no train).
-5. **Evaluate** — `prismguard-model eval --domain general|law` with matching `--normal-txt` when needed.
-6. **Enforce** — only after gates: `PRISMGUARD_USE_ONNX=1` + `PRISMGUARD_ARTIFACT_ID` / `PRISMGUARD_GUARD_MODEL_PATH`.
+2. **Any domain on YOUR system (canonical)** — label your attacks/benigns → `train --domain-pack <slug> --artifact-id prism-pi-<slug>-v1 --feedback-jsonl …` → gate → `domain_pilot`.
+3. **Law proof (optional bundled pack)** — `prismguard-model train --law-pack` → `prism-pi-v1`; eval `--domain law`.
+4. **Finance bake-off (optional bundled pack)** — FinancePackBench `training/finance_guard/` → `prism-pi-finance-v1` when traffic is finance.
+5. **Customer / hub (opt-in)** — `PRISMGUARD_FEEDBACK_PERSIST=1` → export → `train --feedback-jsonl …` with your slug (or `--domain-pack general`).
+6. **Plan first** — `prismguard-model corpus-plan` (dry-run; no train).
+7. **Evaluate** — `prismguard-model eval --domain <slug>` + `--normal-txt` for custom domains.
+8. **Enforce** — after gates: `domain_pilot` + matching artifact (measured finance mid: **100% PI attack** on this path):
+
+```bash
+export PRISMGUARD_DOMAIN=<your-slug>          # any domain — not only finance/law
+export PRISMGUARD_ARTIFACT_ID=prism-pi-<your-slug>-v1
+export PRISMGUARD_USE_ONNX=1
+# optional custom overlay root:
+# export PRISMGUARD_DOMAIN_ROOT=/path/to/domain_packs
+```
+
+```python
+from prismguard.runtime.factory import create_checker_for_app
+
+checker = create_checker_for_app("domain_pilot", domain="<your-slug>", use_onnx=True)
+```
+
+`law_pilot` remains a **deprecated alias** for `domain_pilot` + `domain="law"` only. Do **not** invent `finance_pilot` / `healthcare_pilot`.
+
+When using `--max-train-examples` with `--domain-pack`, domain/feedback rows are **preserved** through stratified subsample so CPU caps cannot drop the domain signal. Train success prints the `domain_pilot` snippet and writes `recommended_profile: domain_pilot` on the artifact `model_card.yaml`.
 
 | Readiness | Artifact | When to enable |
 |-----------|----------|----------------|
-| Law proof | `prism-pi-v1` (default id) | Legal pilots after law holdout green |
-| Hub / general | `prism-pi-hub-v1` or `customer-pi-v1` | After hub FAQ allow + attack holdout gates |
+| Your vertical | `prism-pi-<slug>-v1` | After **your** holdout attack + benign gates |
+| Law proof | `prism-pi-v1` (optional bundled) | Legal pilots after law holdout green |
+| Finance PI | `prism-pi-finance-v1` (optional bundled) | After finance holdout + FX/FAQ allow gates |
+| Hub / general | `prism-pi-hub-v1` or customer id | After hub FAQ allow + attack holdout gates |
 | Production default | ONNX **off** | Rules / `web_chat` until you opt in |
 
 ### 6. Feedback JSONL format

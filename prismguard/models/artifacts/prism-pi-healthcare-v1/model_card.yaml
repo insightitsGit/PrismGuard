@@ -1,0 +1,13 @@
+model_id: prism-pi-healthcare-v1
+version: '1'
+architecture: sequence_classification
+max_length: 256
+injection_label: 1
+base_model: ProtectAI/deberta-v3-base-prompt-injection
+description: >-
+  Optional starter default for healthcare-themed traffic. Does NOT guarantee
+  accuracy on your production DB — train prism-pi-<your-slug>-v1 from your
+  feedback for real gates. Use with domain_pilot + domain=healthcare.
+  Seed train metrics: eval accuracy≈0.87, holdout block rate is starter-only.
+domain: healthcare
+recommended_profile: domain_pilot

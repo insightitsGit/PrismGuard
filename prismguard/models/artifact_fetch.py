@@ -26,7 +26,12 @@ METADATA_FILES = (
 )
 
 # PyPI wheels ship metadata only; model.onnx is fetched on first use.
-# Default download id is prism-pi-v1 (law proof). Hub artifact is opt-in after publish.
+#
+# Optional starter defaults (law / finance / healthcare): convenience for users
+# without their own labeled DB. They do NOT guarantee accuracy on customer traffic.
+# Prefer: train on your feedback → domain_pilot + prism-pi-<your-slug>-v1.
+#
+# Release assets for finance/healthcare: tag v0.1.10+ (upload via scripts/publish_default_artifacts.md).
 ARTIFACT_DOWNLOADS: dict[str, dict[str, dict[str, str | int]]] = {
     "prism-pi-v1": {
         "model.onnx": {
@@ -38,8 +43,32 @@ ARTIFACT_DOWNLOADS: dict[str, dict[str, dict[str, str | int]]] = {
             "size_bytes": 738_656_170,
         }
     },
-    # Placeholder: set URL/sha after scripts/train_prism_pi_hub.py gates pass + Release upload.
-    # "prism-pi-hub-v1": { "model.onnx": { "url": "...", "sha256": "...", "size_bytes": 0 } },
+    "prism-pi-finance-v1": {
+        "model.onnx": {
+            "url": os.environ.get(
+                "PRISMGUARD_FINANCE_MODEL_DOWNLOAD_URL",
+                "https://github.com/insightitsGit/PrismGuard/releases/download/v0.1.10/prism-pi-finance-v1-model.onnx",
+            ),
+            "sha256": os.environ.get(
+                "PRISMGUARD_FINANCE_MODEL_SHA256",
+                "1ade911b48e8e44e53bd76219fe78ead40aa6d342697cbdaad1d8942904d1260",
+            ),
+            "size_bytes": 738_656_170,
+        }
+    },
+    "prism-pi-healthcare-v1": {
+        "model.onnx": {
+            "url": os.environ.get(
+                "PRISMGUARD_HEALTHCARE_MODEL_DOWNLOAD_URL",
+                "https://github.com/insightitsGit/PrismGuard/releases/download/v0.1.10/prism-pi-healthcare-v1-model.onnx",
+            ),
+            "sha256": os.environ.get(
+                "PRISMGUARD_HEALTHCARE_MODEL_SHA256",
+                "0928e3b7917db70cbfcde5d075063bfc66a47aa895c0115ca094ded87795cab7",
+            ),
+            "size_bytes": 738_656_170,
+        }
+    },
 }
 
 
@@ -155,30 +184,46 @@ def download_file(
 
 def download_artifact(artifact_id: str = DEFAULT_ARTIFACT_ID, *, progress: bool = True) -> Path:
     packaged = packaged_artifact_dir(artifact_id)
-    if not packaged.is_dir():
-        raise FileNotFoundError(f"Unknown artifact id {artifact_id!r}")
-
     cache = cache_artifact_dir(artifact_id)
-    sync_metadata(packaged, cache)
+    if packaged.is_dir():
+        sync_metadata(packaged, cache)
 
     spec = ARTIFACT_DOWNLOADS.get(artifact_id, {}).get("model.onnx")
     if spec is None:
-        raise FileNotFoundError(f"No download spec for artifact {artifact_id!r}")
+        # Custom / customer-trained ids are not downloadable starters.
+        local = packaged if packaged.is_dir() else cache
+        if (local / "model.onnx").is_file():
+            return local
+        raise FileNotFoundError(
+            f"No download spec for artifact {artifact_id!r}. "
+            "Custom artifacts: train locally "
+            "(`prismguard-model train --artifact-id …`) and set "
+            "PRISMGUARD_GUARD_MODEL_PATH / PRISMGUARD_ARTIFACT_ID. "
+            "Starter list: prismguard-model download --list"
+        )
 
     dest = cache / "model.onnx"
-    if dest.is_file() and spec.get("sha256"):
-        if _sha256_file(dest) == str(spec["sha256"]).lower():
+    expected_sha = str(spec.get("sha256", "") or "").lower()
+    if dest.is_file() and expected_sha:
+        if _sha256_file(dest) == expected_sha:
             return cache
+
+    if not str(spec.get("url", "")).strip():
+        raise FileNotFoundError(
+            f"Download URL not configured for {artifact_id!r}. "
+            "Train locally or set PRISMGUARD_*_MODEL_DOWNLOAD_URL."
+        )
 
     if progress:
         sys.stderr.write(
             f"Fetching {artifact_id} ONNX model (~{_format_bytes(int(spec.get('size_bytes', 0)))}) "
             f"to {cache}\n"
+            "Note: starter defaults do NOT guarantee accuracy on your traffic.\n"
         )
     download_file(
         str(spec["url"]),
         dest,
-        expected_sha256=str(spec.get("sha256", "")),
+        expected_sha256=expected_sha,
         expected_size=int(spec.get("size_bytes", 0) or 0),
         progress=progress,
     )
@@ -192,16 +237,23 @@ def ensure_artifact_ready(
     progress: bool = False,
 ) -> Path:
     packaged = packaged_artifact_dir(artifact_id)
-    if not packaged.is_dir():
-        raise FileNotFoundError(f"Unknown artifact id {artifact_id!r}")
+    cache = cache_artifact_dir(artifact_id)
 
-    if (packaged / "model.onnx").is_file():
+    if packaged.is_dir() and (packaged / "model.onnx").is_file():
         return packaged
 
-    cache = cache_artifact_dir(artifact_id)
     if (cache / "model.onnx").is_file():
-        sync_metadata(packaged, cache)
+        if packaged.is_dir():
+            sync_metadata(packaged, cache)
         return cache
+
+    # Starter downloads only when we have a registered URL/sha.
+    if artifact_id not in ARTIFACT_DOWNLOADS and not packaged.is_dir():
+        raise FileNotFoundError(
+            f"Unknown artifact id {artifact_id!r}. "
+            "Train with `prismguard-model train --artifact-id …` or set "
+            "PRISMGUARD_GUARD_MODEL_PATH. Starters: prismguard-model download --list"
+        )
 
     if not auto_download:
         raise FileNotFoundError(
